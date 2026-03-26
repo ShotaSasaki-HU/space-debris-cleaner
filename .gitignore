@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# VSCode
+.vscode
+
+# Python
+.venv/
+*.pyc
+**/__pycache__/
+.env
+.pytest_cache
