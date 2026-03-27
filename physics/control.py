@@ -24,6 +24,6 @@ class PDController:
         # 宇宙空間ではD項が逆噴射の役割を果たすため極めて重要
         p_term = self.kp * error
         d_term = -self.kd * current_angular_velocity
-        print(p_term + d_term)
+        # print(p_term + d_term)
         
         return p_term + d_term
