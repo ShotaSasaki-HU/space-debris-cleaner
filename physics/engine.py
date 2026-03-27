@@ -24,10 +24,16 @@ class GravityEngine:
 
     def _compute_accelerations_for(self, target_bodies: List[RigidBody]) -> None:
         """
-        全天体間の万有引力を計算し，各剛体の加速度を更新する内部メソッド．
+        指定された剛体リストに対して，万有引力と外部推力による加速度を計算する．
         """
         for body in target_bodies:
-            body.acceleration.fill(0.0)
+            # 万有引力の計算前に，プレイヤーからの推力を加速度にセットする．
+            if body.mass > 0:
+                body.acceleration = body.applied_force / body.mass
+                body.angular_acceleration = body.applied_torque / body.moment_of_inertia
+            else:
+                body.acceleration.fill(0.0)
+                body.angular_acceleration = 0.0
 
         n = len(target_bodies)
         for i in range(n):
@@ -46,23 +52,28 @@ class GravityEngine:
 
     def _step_bodies(self, target_bodies: List[RigidBody], dt: float) -> None:
         """
-        指定された剛体リストと時間刻み幅で，速度ベルレ法の1ステップを実行する．
+        指定された剛体リストと時間刻み幅で，並進と回転の速度ベルレ法を実行する．
         """
         # Step 1: 位置更新
         for body in target_bodies:
             if not body.is_fixed:
                 body.position += body.velocity * dt + 0.5 * body.acceleration * (dt ** 2)
+                body.angle += body.angular_velocity * dt + 0.5 * body.angular_acceleration * (dt ** 2)
                 
         # Step 2: 加速度退避
-        old_accels = [b.acceleration.copy() for b in target_bodies]
+        old_accs = [b.acceleration.copy() for b in target_bodies]
+        old_angle_accs = [b.angular_acceleration for b in target_bodies] # floatはイミュータブル
         
         # Step 3: 新しい加速度計算
         self._compute_accelerations_for(target_bodies)
         
-        # Step 4: 速度更新
+        # Step 4: 速度・角速度更新
         for i, body in enumerate(target_bodies):
             if not body.is_fixed:
-                body.velocity += 0.5 * (old_accels[i] + body.acceleration) * dt
+                body.velocity += 0.5 * (old_accs[i] + body.acceleration) * dt
+                body.angular_velocity += 0.5 * (old_angle_accs[i] + body.angular_acceleration) * dt
+            
+            body.clear_applied_forces() # スラスター入力のリセット
 
     def initialize(self) -> None:
         """

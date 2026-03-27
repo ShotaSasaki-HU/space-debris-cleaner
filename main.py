@@ -2,6 +2,7 @@
 import pygame
 import sys
 import numpy as np
+import math
 
 from physics.engine import GravityEngine
 from physics.body import RigidBody
@@ -14,15 +15,40 @@ from view.camera import Camera
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
+PIXELS_PER_DU = 100.0 # 1 DU（地球半径）を 100 ピクセルとして描画
 
-# 1 DU（地球半径）を 100 ピクセルとして描画
-PIXELS_PER_DU = 100.0
-
-# 色の定義 (R, G, B)
 COLOR_BG = (10, 10, 20)      # 宇宙の背景色（暗い紺色）
 COLOR_EARTH = (50, 150, 255) # 地球の色
 COLOR_SAT = (255, 200, 50)   # 衛星の色
 COLOR_PREDICTION = (255, 255, 255, 150) # 予測線の色
+
+THRUST_POWER = 0.05 * (KG_TO_MU * 500) # 並進推力
+TORQUE_POWER = 0.05 * 1.0 # 回転トルク
+
+def draw_satellite(screen: pygame.Surface, camera: Camera, body: RigidBody, color: tuple, size_du: float = 0.05):
+    """
+    衛星を現在の角度に基づき，進行方向が分かる三角形で描画する．
+    """
+    # ワールド座標系での三角形の3頂点のオフセットを計算
+    # 機首（前）
+    nose_offset = np.array([math.cos(body.angle), math.sin(body.angle)]) * size_du
+    # 左後ろ (機首から140度ずらした位置)
+    left_offset = np.array([math.cos(body.angle + 2.44), math.sin(body.angle + 2.44)]) * size_du
+    # 右後ろ (機首から-140度ずらした位置)
+    right_offset = np.array([math.cos(body.angle - 2.44), math.sin(body.angle - 2.44)]) * size_du
+
+    # ワールド座標の絶対位置に変換
+    nose_pos = body.position + nose_offset
+    left_pos = body.position + left_offset
+    right_pos = body.position + right_offset
+
+    points = [
+        camera.world_to_screen(nose_pos),
+        camera.world_to_screen(left_pos),
+        camera.world_to_screen(right_pos)
+    ]
+
+    pygame.draw.polygon(screen, color, points)
 
 def main():
     pygame.init()
@@ -41,19 +67,31 @@ def main():
     M_earth = KG_TO_MU * EARTH_MASS_KG
     earth = RigidBody(mass=M_earth, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), is_fixed=True)
     
-    # 衛星の配置
-    r = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
-    # v = np.sqrt(G_CANONICAL * M_earth / r)
-    v = 10e3 * METER_TO_DU / SEC_TO_TU
-    satellite1 = RigidBody(mass=KG_TO_MU * 500, position=np.array([r, 0.0]), velocity=np.array([0.0, v]))
-
+    # クリーナー衛星
     r = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
     v = np.sqrt(G_CANONICAL * M_earth / r)
-    satellite2 = RigidBody(mass=KG_TO_MU * 500, position=np.array([r, 0.0]), velocity=np.array([0.0, v]))
+    player_sat = RigidBody(
+        mass=KG_TO_MU * 500, 
+        position=np.array([r, 0.0]), 
+        velocity=np.array([0.0, v]),
+        moment_of_inertia=1.0,
+        angle=math.pi / 2.0 
+    )
+
+    r = METER_TO_DU * (EARTH_RADIUS_M + 10000e3)
+    # v = 10e3 * METER_TO_DU / SEC_TO_TU
+    v = np.sqrt(G_CANONICAL * M_earth / r)
+    sat2 = RigidBody(
+        mass=KG_TO_MU * 500, 
+        position=np.array([r, 0.0]), 
+        velocity=np.array([0.0, v]),
+        moment_of_inertia=1.0,
+        angle=math.pi / 2.0 
+    )
 
     engine.add_body(earth)
-    engine.add_body(satellite1)
-    engine.add_body(satellite2)
+    engine.add_body(player_sat)
+    engine.add_body(sat2)
     
     engine.initialize() # ベルレ法の初期化
 
@@ -71,20 +109,43 @@ def main():
 
     running = True
     while running:
-        # イベント処理
+        # ==========================================
+        # Controller層（ユーザー入力処理）
+        # ==========================================
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+        
+        keys = pygame.key.get_pressed()
 
-        # 物理状態の更新
+        # 並進スラスター
+        thrust_x = 0.0
+        thrust_y = 0.0
+        if keys[pygame.K_w]: thrust_x += THRUST_POWER
+        if keys[pygame.K_s]: thrust_x -= THRUST_POWER
+        if keys[pygame.K_a]: thrust_y += THRUST_POWER
+        if keys[pygame.K_d]: thrust_y -= THRUST_POWER
+
+        if thrust_x != 0 or thrust_y != 0:
+            player_sat.apply_local_force(thrust_x, thrust_y)
+
+        # 回転スラスター
+        if keys[pygame.K_q]: player_sat.apply_torque(TORQUE_POWER) # CCW
+        if keys[pygame.K_e]: player_sat.apply_torque(-TORQUE_POWER) # CW
+
+        # ==========================================
+        # Model層（状態の更新と予測）
+        # ==========================================
         engine.step()
 
         # 軌道予測の計算
         # パフォーマンスが悪い場合は，呼び出し頻度やデルタタイムを下げる．
         orbital_predictions = engine.predict_trajectories(future_duration=2.0 * np.pi * 4.0, dt_prediction=0.05)
 
-        # 画面のクリア
-        screen.fill(COLOR_BG)
+        # ==========================================
+        # View層（描画）
+        # ==========================================
+        screen.fill(COLOR_BG) # 画面のクリア
         prediction_surface.fill((0,0,0,0)) # 透明
 
         # 予測線の描画
@@ -112,10 +173,9 @@ def main():
         pygame.draw.circle(screen, COLOR_EARTH, earth_screen_pos, int(1.0 * camera.pixels_per_du))
 
         # 衛星の描画（画面上で見やすいように固定の5ピクセルで描画）
-        for b in engine.bodies:
-            if b.is_fixed: continue
-            sat_screen_pos = camera.world_to_screen(b.position)
-            pygame.draw.circle(screen, COLOR_SAT, sat_screen_pos, 5)
+        for body in engine.bodies:
+            if body.is_fixed: continue
+            draw_satellite(screen, camera, body, COLOR_SAT, size_du=0.08)
 
         pygame.display.flip() # 画面の更新
         clock.tick(FPS) # フレームレートの制御
