@@ -7,7 +7,7 @@ import math
 from physics.engine import GravityEngine
 from physics.body import RigidBody
 from physics.constants import KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL
-from physics.control import PDController
+from physics.control import PIDController
 
 from view.camera import Camera
 from view.renderer import GameRenderer
@@ -17,6 +17,7 @@ SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
 PIXELS_PER_DU = 100.0
+TIME_STEP_TU = 0.01
 
 THRUST_POWER = 0.05 * (KG_TO_MU * 500)
 TORQUE_POWER = 1.0 * 1.0
@@ -39,7 +40,7 @@ class SpaceDebrisApp:
 
     def _setup_physics(self):
         """物理エンジンと天体の初期配置"""
-        self.engine = GravityEngine(time_step=0.05)
+        self.engine = GravityEngine(time_step=TIME_STEP_TU)
         M_earth = KG_TO_MU * EARTH_MASS_KG
         
         self.earth = RigidBody(mass=M_earth, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), is_fixed=True)
@@ -71,7 +72,7 @@ class SpaceDebrisApp:
     def _setup_controls(self):
         """入力制御系の初期化"""
         self.sas_enabled = False
-        self.sas_controller = PDController(kp=4.0, kd=1.0)
+        self.sas_controller = PIDController(kp=1.0, ki=0.0, kd=1.0)
 
     def handle_events(self):
         """ユーザー入力の処理"""
@@ -98,7 +99,9 @@ class SpaceDebrisApp:
         if self.sas_enabled:
             target_angle = math.atan2(self.player_sat.velocity[1], self.player_sat.velocity[0])
             auto_torque = self.sas_controller.compute_torque(
-                self.player_sat.angle, target_angle, self.player_sat.angular_velocity
+                current_angle=self.player_sat.angle,
+                target_angle=target_angle,
+                dt_tu=TIME_STEP_TU
             )
             auto_torque = np.clip(auto_torque, -TORQUE_POWER, TORQUE_POWER)
             self.player_sat.apply_torque(auto_torque)
