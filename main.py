@@ -57,7 +57,7 @@ class SpaceDebrisApp:
         v_debris = np.sqrt(G_CANONICAL * M_earth / r_debris)
         self.target_debris = RigidBody(
             mass=KG_TO_MU * 500, position=np.array([r_debris, 0.0]),
-            velocity=np.array([0.0, v_debris]), moment_of_inertia=1.0, angle=math.pi / 4.0
+            velocity=np.array([0.0, v_debris]), moment_of_inertia=1.0, angle=0.0
         )
 
         self.engine.add_body(self.earth)

@@ -50,13 +50,38 @@ class GameRenderer:
         pygame.draw.circle(self.screen, COLOR_EARTH, earth_pos, int(1.0 * self.camera.pixels_per_du))
 
         # デブリ
-        debris_pos = self.camera.world_to_screen(debris.position)
-        pygame.draw.rect(self.screen, COLOR_DEBRIS, (debris_pos[0]-6, debris_pos[1]-6, 12, 12))
+        debris_size_du = 12.0 / self.camera.pixels_per_du
+        self._draw_debris(debris, COLOR_DEBRIS, size_du=debris_size_du)
 
         # プレイヤー
         # 画面上でNピクセルの大きさになるように，現在のカメラのスケールから DU を逆算する．
         player_size_du = 8.0 / self.camera.pixels_per_du
         self._draw_satellite(player, COLOR_PLAYER, size_du=player_size_du)
+
+    def _draw_debris(self, body: RigidBody, color: tuple, size_du: float):
+        """デブリを回転する四角形で描画する内部メソッド"""
+        half_s = size_du / 2.0
+        # ローカル座標系での4つの頂点
+        corners = [
+            np.array([ half_s,  half_s]),
+            np.array([-half_s,  half_s]),
+            np.array([-half_s, -half_s]),
+            np.array([ half_s, -half_s])
+        ]
+        
+        cos_t = math.cos(body.angle)
+        sin_t = math.sin(body.angle)
+        
+        points = []
+        for c in corners:
+            # 回転行列でローカル座標を回転
+            rx = c[0] * cos_t - c[1] * sin_t
+            ry = c[0] * sin_t + c[1] * cos_t
+            # ワールド座標に変換し，カメラに通す．
+            world_pos = body.position + np.array([rx, ry])
+            points.append(self.camera.world_to_screen(world_pos))
+            
+        pygame.draw.polygon(self.screen, color, points)
 
     def _draw_satellite(self, body: RigidBody, color: tuple, size_du: float):
         """衛星を三角形で描画する内部メソッド"""
