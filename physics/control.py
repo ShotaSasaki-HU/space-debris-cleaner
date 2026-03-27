@@ -30,5 +30,4 @@ class PIDController:
 
         self.prev_error = error
         
-        print(p_term + i_term + d_term)
         return p_term + i_term + d_term
