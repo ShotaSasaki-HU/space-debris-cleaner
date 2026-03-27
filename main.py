@@ -22,7 +22,7 @@ PIXELS_PER_DU = 100.0
 COLOR_BG = (10, 10, 20)      # 宇宙の背景色（暗い紺色）
 COLOR_EARTH = (50, 150, 255) # 地球の色
 COLOR_SAT = (255, 200, 50)   # 衛星の色
-COLOR_PREDICTION = (100, 255, 100, 150) # 予測線の色
+COLOR_PREDICTION = (255, 255, 255, 150) # 予測線の色
 
 def main():
     pygame.init()
