@@ -54,7 +54,9 @@ class GameRenderer:
         pygame.draw.rect(self.screen, COLOR_DEBRIS, (debris_pos[0]-6, debris_pos[1]-6, 12, 12))
 
         # プレイヤー
-        self._draw_satellite(player, COLOR_PLAYER, size_du=0.08)
+        # 画面上でNピクセルの大きさになるように，現在のカメラのスケールから DU を逆算する．
+        player_size_du = 8.0 / self.camera.pixels_per_du
+        self._draw_satellite(player, COLOR_PLAYER, size_du=player_size_du)
 
     def _draw_satellite(self, body: RigidBody, color: tuple, size_du: float):
         """衛星を三角形で描画する内部メソッド"""

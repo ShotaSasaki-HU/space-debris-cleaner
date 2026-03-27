@@ -9,7 +9,7 @@ from physics.body import RigidBody
 from physics.constants import KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL
 from physics.control import PIDController
 
-from view.camera import Camera
+from view.camera import Camera, RelativeCamera
 from view.renderer import GameRenderer
 
 # アプリケーション全体の設定
@@ -33,6 +33,7 @@ class SpaceDebrisApp:
         pygame.display.set_caption("Space Debris Cleaner")
         self.clock = pygame.time.Clock()
         self.running = True
+        self.view_mode = "MACRO" # "MACRO" または "MICRO"
 
         self._setup_physics()
         self._setup_view()
@@ -45,18 +46,18 @@ class SpaceDebrisApp:
         
         self.earth = RigidBody(mass=M_earth, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), is_fixed=True)
         
-        r_player = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
+        r_player = METER_TO_DU * (EARTH_RADIUS_M + 10010e3)
         v_player = np.sqrt(G_CANONICAL * M_earth / r_player)
         self.player_sat = RigidBody(
-            mass=KG_TO_MU * 500, position=np.array([r_player, 0.0]), 
-            velocity=np.array([0.0, v_player]), moment_of_inertia=1.0, angle=math.pi / 2.0 
+            mass=KG_TO_MU * 500, position=np.array([r_player, 0.0]),
+            velocity=np.array([0.0, v_player]), moment_of_inertia=1.0, angle=math.pi / 2.0
         )
 
         r_debris = METER_TO_DU * (EARTH_RADIUS_M + 10000e3)
         v_debris = np.sqrt(G_CANONICAL * M_earth / r_debris)
         self.target_debris = RigidBody(
-            mass=KG_TO_MU * 500, position=np.array([r_debris, 0.0]), 
-            velocity=np.array([0.0, v_debris]), moment_of_inertia=1.0, angle=math.pi / 2.0 
+            mass=KG_TO_MU * 500, position=np.array([r_debris, 0.0]),
+            velocity=np.array([0.0, v_debris]), moment_of_inertia=1.0, angle=math.pi / 4.0
         )
 
         self.engine.add_body(self.earth)
@@ -66,8 +67,10 @@ class SpaceDebrisApp:
 
     def _setup_view(self):
         """描画関連の初期化"""
-        camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU)
-        self.renderer = GameRenderer(self.screen, camera)
+        self.macro_camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU) # ランデブー画面用
+        self.micro_camera = RelativeCamera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU * 100) # 近傍運用画面用
+        self.micro_camera.set_target(self.target_debris)
+        self.renderer = GameRenderer(self.screen, self.macro_camera)
 
     def _setup_controls(self):
         """入力制御系の初期化"""
@@ -82,6 +85,14 @@ class SpaceDebrisApp:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_t:
                     self.sas_enabled = not self.sas_enabled
+                # Enterキーでカメラを切り替える処理
+                elif event.key == pygame.K_RETURN:
+                    if self.view_mode == "MACRO":
+                        self.view_mode = "MICRO"
+                        self.renderer.camera = self.micro_camera
+                    else:
+                        self.view_mode = "MACRO"
+                        self.renderer.camera = self.macro_camera
         
         keys = pygame.key.get_pressed()
 
