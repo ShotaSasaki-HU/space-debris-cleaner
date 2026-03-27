@@ -8,6 +8,7 @@ from physics.engine import GravityEngine
 from physics.body import RigidBody
 from physics.constants import KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL, SEC_TO_TU
 from view.camera import Camera
+from physics.control import PDController
 
 # ==========================================
 # 定数設定（描画用）
@@ -23,7 +24,7 @@ COLOR_SAT = (255, 200, 50)   # 衛星の色
 COLOR_PREDICTION = (255, 255, 255, 150) # 予測線の色
 
 THRUST_POWER = 0.05 * (KG_TO_MU * 500) # 並進推力
-TORQUE_POWER = 0.05 * 1.0 # 回転トルク
+TORQUE_POWER = 1.0 * 1.0 # 回転トルク
 
 def draw_satellite(screen: pygame.Surface, camera: Camera, body: RigidBody, color: tuple, size_du: float = 0.05):
     """
@@ -55,13 +56,14 @@ def main():
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Space Debris Cleaner")
     clock = pygame.time.Clock()
+    font = pygame.font.SysFont(None, 24)
 
     # ==========================================
     # Model（物理エンジン）のセットアップ
     # ==========================================
     # ゲームループの1フレームで進めるシミュレーション時間
     # 早送りをしたい場合はこの time_step を大きくする．
-    engine = GravityEngine(time_step=0.05)
+    engine = GravityEngine(time_step=0.01)
 
     # 地球の配置（DU空間）
     M_earth = KG_TO_MU * EARTH_MASS_KG
@@ -104,6 +106,10 @@ def main():
     # ゲームループ（Controller & View）
     # ==========================================
 
+    # フライトコンピュータSASの初期設定
+    sas_enabled = False
+    sas_controller = PDController(kp=4.0, kd=1.0)
+
     # 予測線描画用サーフェス（透明度を使用するため，SRCALPHAフラグが必要．）
     prediction_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
 
@@ -115,6 +121,9 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_t:
+                    sas_enabled = not sas_enabled # SASのトグル
         
         keys = pygame.key.get_pressed()
 
@@ -128,10 +137,23 @@ def main():
 
         if thrust_x != 0 or thrust_y != 0:
             player_sat.apply_local_force(thrust_x, thrust_y)
+        
+        if sas_enabled:
+            # SAS ON: 進行方向に自動で指向
+            target_angle = math.atan2(player_sat.velocity[1], player_sat.velocity[0])
+            
+            auto_torque = sas_controller.compute_torque(
+                current_angle=player_sat.angle,
+                target_angle=target_angle,
+                current_angular_velocity=player_sat.angular_velocity
+            )
+            auto_torque = np.clip(auto_torque, -TORQUE_POWER, TORQUE_POWER)
 
-        # 回転スラスター
-        if keys[pygame.K_q]: player_sat.apply_torque(TORQUE_POWER) # CCW
-        if keys[pygame.K_e]: player_sat.apply_torque(-TORQUE_POWER) # CW
+            player_sat.apply_torque(auto_torque)
+        else:
+            # SAS OFF: 手動操作（QE）
+            if keys[pygame.K_q]: player_sat.apply_torque(TORQUE_POWER) # CCW
+            if keys[pygame.K_e]: player_sat.apply_torque(-TORQUE_POWER) # CW
 
         # ==========================================
         # Model層（状態の更新と予測）
@@ -172,10 +194,21 @@ def main():
         earth_screen_pos = camera.world_to_screen(earth.position)
         pygame.draw.circle(screen, COLOR_EARTH, earth_screen_pos, int(1.0 * camera.pixels_per_du))
 
-        # 衛星の描画（画面上で見やすいように固定の5ピクセルで描画）
-        for body in engine.bodies:
-            if body.is_fixed: continue
-            draw_satellite(screen, camera, body, COLOR_SAT, size_du=0.08)
+        # 衛星の描画
+        draw_satellite(screen, camera, player_sat, (255, 0, 0), size_du=0.08)
+        draw_satellite(screen, camera, sat2, COLOR_SAT, size_du=0.08)
+        
+        # SASステータス
+        sas_text = "SAS: ON" if sas_enabled else "SAS: OFF"
+        sas_color = (100, 255, 100) if sas_enabled else (200, 200, 200)
+        text_surface = font.render(sas_text, True, sas_color)
+        screen.blit(text_surface, (20, 20))
+        
+        # 操作説明
+        help_text1 = font.render("T: Toggle SAS | W/S: Forward/Backward | A/D: Left/Right", True, (150, 150, 150))
+        help_text2 = font.render("Q/E: Manual Rotation (when SAS is OFF)", True, (150, 150, 150))
+        screen.blit(help_text1, (20, 50))
+        screen.blit(help_text2, (20, 70))
 
         pygame.display.flip() # 画面の更新
         clock.tick(FPS) # フレームレートの制御
