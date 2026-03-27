@@ -113,13 +113,13 @@ class SpaceDebrisApp:
         """状態の更新"""
         self.engine.step()
         self.orbital_predictions = self.engine.predict_trajectories(
-            future_duration=2.0 * np.pi * 4.0, dt_prediction=0.05
+            future_duration=30.0, dt_prediction=0.05
         )
 
     def render(self):
         """画面の描画"""
         self.renderer.clear()
-        self.renderer.draw_predictions(self.orbital_predictions)
+        self.renderer.draw_predictions(self.orbital_predictions, player=self.player_sat)
         self.renderer.draw_bodies(self.earth, self.player_sat, self.target_debris)
         self.renderer.draw_ui(self.player_sat, self.target_debris, self.sas_enabled)
         

@@ -30,13 +30,16 @@ class GameRenderer:
         self.screen.fill(bg_color)
         self.prediction_surface.fill((0, 0, 0, 0))
 
-    def draw_predictions(self, predictions_dict: dict):
+    def draw_predictions(self, predictions_dict: dict, player: RigidBody):
         """全オブジェクトの軌道予測線を描画する"""
-        for path in predictions_dict.values():
+        for body_id, path in predictions_dict.items():
             if len(path) < 2: continue
             
             screen_points = [self.camera.world_to_screen(p) for p in path]
-            pygame.draw.aalines(self.prediction_surface, COLOR_PREDICTION, False, screen_points)
+            if body_id == id(player):
+                pygame.draw.aalines(self.prediction_surface, COLOR_PLAYER + (150, ), False, screen_points)
+            else:
+                pygame.draw.aalines(self.prediction_surface, COLOR_PREDICTION, False, screen_points)
             
         self.screen.blit(self.prediction_surface, (0, 0))
 
