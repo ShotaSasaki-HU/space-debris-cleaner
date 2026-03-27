@@ -67,9 +67,14 @@ class SpaceDebrisApp:
 
     def _setup_view(self):
         """描画関連の初期化"""
-        self.macro_camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU) # ランデブー画面用
-        self.micro_camera = RelativeCamera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU * 100) # 近傍運用画面用
+        self.macro_camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU)
+
+        self.micro_camera = RelativeCamera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU * 100)
         self.micro_camera.set_target(self.target_debris)
+
+        self.nano_camera = RelativeCamera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU * 10000)
+        self.nano_camera.set_target(self.target_debris)
+
         self.renderer = GameRenderer(self.screen, self.macro_camera)
 
     def _setup_controls(self):
@@ -85,11 +90,14 @@ class SpaceDebrisApp:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_t:
                     self.sas_enabled = not self.sas_enabled
-                # Enterキーでカメラを切り替える処理
+                # カメラの3段階切り替えロジック（エンターキー）
                 elif event.key == pygame.K_RETURN:
                     if self.view_mode == "MACRO":
                         self.view_mode = "MICRO"
                         self.renderer.camera = self.micro_camera
+                    elif self.view_mode == "MICRO":
+                        self.view_mode = "NANO"
+                        self.renderer.camera = self.nano_camera
                     else:
                         self.view_mode = "MACRO"
                         self.renderer.camera = self.macro_camera

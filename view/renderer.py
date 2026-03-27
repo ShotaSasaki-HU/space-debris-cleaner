@@ -126,10 +126,14 @@ class GameRenderer:
 
     def _draw_control_console(self, sas_enabled: bool):
         """操作に関するテキスト表示"""
+        # UIの一番上に現在のカメラモードを描画
+        mode_text = "VIEW: " + ("MACRO (Absolute)" if isinstance(self.camera, Camera) else "MICRO/NANO (Relative)")
+        self.screen.blit(self.font.render(mode_text, True, COLOR_UI_TEXT), (20, 20))
+        
         sas_text = "SAS: ON" if sas_enabled else "SAS: OFF"
         sas_color = (100, 255, 100) if sas_enabled else (200, 200, 200)
-        self.screen.blit(self.font.render(sas_text, True, sas_color), (20, 20))
+        self.screen.blit(self.font.render(sas_text, True, sas_color), (20, 40))
         
         help_color = (150, 150, 150)
-        self.screen.blit(self.font.render("W/S: Forward/Backward | A/D: Left/Right", True, help_color), (20, 50))
-        self.screen.blit(self.font.render("Q/E: Manual Rotation (SAS OFF) | T: Toggle SAS", True, help_color), (20, 70))
+        self.screen.blit(self.font.render("W/S: Forward/Backward | A/D: Left/Right", True, help_color), (20, 60))
+        self.screen.blit(self.font.render("Q/E: Manual Rotation (SAS OFF) | T: Toggle SAS", True, help_color), (20, 80))
