@@ -96,10 +96,10 @@ class GameRenderer:
         ]
         pygame.draw.polygon(self.screen, color, points)
 
-    def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool):
+    def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float):
         """各種UIを描画する"""
         self._draw_rel_nav_ui(player, target)
-        self._draw_control_console(sas_enabled)
+        self._draw_control_console(sas_enabled, throttle)
 
     def _draw_rel_nav_ui(self, player: RigidBody, target: RigidBody):
         """相対ナビゲーションUI"""
@@ -124,7 +124,7 @@ class GameRenderer:
             text_surf = self.font.render(line, True, color)
             self.screen.blit(text_surf, (20, y_offset + i * 22))
 
-    def _draw_control_console(self, sas_enabled: bool):
+    def _draw_control_console(self, sas_enabled: bool, throttle: float):
         """操作に関するテキスト表示"""
         # UIの一番上に現在のカメラモードを描画
         mode_text = "VIEW: " + ("MACRO (Absolute)" if isinstance(self.camera, Camera) else "MICRO/NANO (Relative)")
@@ -137,3 +137,25 @@ class GameRenderer:
         help_color = (150, 150, 150)
         self.screen.blit(self.font.render("W/S: Forward/Backward | A/D: Left/Right", True, help_color), (20, 60))
         self.screen.blit(self.font.render("Q/E: Manual Rotation (SAS OFF) | T: Toggle SAS", True, help_color), (20, 80))
+
+        # スロットルゲージの描画
+        bar_w = 20
+        bar_h = 200
+        x = self.screen.get_width() - 40
+        y = self.screen.get_height() - bar_h - 40
+        
+        # 外枠
+        pygame.draw.rect(self.screen, (100, 100, 100), (x, y, bar_w, bar_h), 2)
+        
+        # 中身（スロットル値に応じて高さと色を変える）
+        fill_h = int(bar_h * throttle)
+        fill_y = y + bar_h - fill_h
+        if throttle > 0.8: color = (255, 100, 100)
+        elif throttle > 0.2: color = (255, 255, 100)
+        else: color = (100, 255, 100)
+        
+        pygame.draw.rect(self.screen, color, (x, fill_y, bar_w, fill_h))
+        
+        # テキスト表示
+        throttle_text = self.font.render(f"THRUST:{int(throttle*100):3d}%", True, COLOR_UI_TEXT)
+        self.screen.blit(throttle_text, (x - 140, y - 25))

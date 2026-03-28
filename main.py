@@ -6,7 +6,7 @@ import math
 
 from physics.engine import GravityEngine
 from physics.body import RigidBody
-from physics.constants import KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL
+from physics.constants import KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL, SEC_TO_TU
 from physics.control import PIDController
 
 from view.camera import Camera, RelativeCamera
@@ -19,8 +19,14 @@ FPS = 60
 PIXELS_PER_DU = 100.0
 TIME_STEP_TU = 0.01
 
-THRUST_POWER = 0.05 * (KG_TO_MU * 500)
-TORQUE_POWER = 1.0 * 1.0
+SAT_MASS_KG = 150.0  # Wet重量
+SAT_MOMENT_OF_INERTIA_KG_M2 = 25.0 
+
+MAX_THRUST_NEWTON = 100.0 # 最大推力（SI単位系）
+MAX_TORQUE_NM = 0.001 # 最大トルク（SI単位系）
+
+NEWTON_TO_CANONICAL = KG_TO_MU * METER_TO_DU / (SEC_TO_TU ** 2)
+NM_TO_CANONICAL = NEWTON_TO_CANONICAL * METER_TO_DU
 
 class SpaceDebrisApp:
     """
@@ -33,7 +39,8 @@ class SpaceDebrisApp:
         pygame.display.set_caption("Space Debris Cleaner")
         self.clock = pygame.time.Clock()
         self.running = True
-        self.view_mode = "MACRO" # "MACRO" または "MICRO"
+        self.view_mode = "MACRO"
+        self.throttle = 1.0 # スロットル100%
 
         self._setup_physics()
         self._setup_view()
@@ -43,27 +50,29 @@ class SpaceDebrisApp:
         """物理エンジンと天体の初期配置"""
         self.engine = GravityEngine(time_step=TIME_STEP_TU)
         M_earth = KG_TO_MU * EARTH_MASS_KG
-        
         self.earth = RigidBody(mass=M_earth, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), is_fixed=True)
         
         r_player = METER_TO_DU * (EARTH_RADIUS_M + 10010e3)
         v_player = np.sqrt(G_CANONICAL * M_earth / r_player)
-        self.player_sat = RigidBody(
-            mass=KG_TO_MU * 500, position=np.array([r_player, 0.0]),
-            velocity=np.array([0.0, v_player]), moment_of_inertia=1.0, angle=math.pi / 2.0
-        )
+        m_sat_cano = SAT_MASS_KG * KG_TO_MU
+        i_sat_cano = SAT_MOMENT_OF_INERTIA_KG_M2 * KG_TO_MU * (METER_TO_DU ** 2)
+        self.player_sat = RigidBody(mass=m_sat_cano, position=np.array([r_player, 0.0]),
+                                    velocity=np.array([0.0, v_player]), moment_of_inertia=i_sat_cano, angle=math.pi / 2.0)
 
         r_debris = METER_TO_DU * (EARTH_RADIUS_M + 10000e3)
         v_debris = np.sqrt(G_CANONICAL * M_earth / r_debris)
-        self.target_debris = RigidBody(
-            mass=KG_TO_MU * 500, position=np.array([r_debris, 0.0]),
-            velocity=np.array([0.0, v_debris]), moment_of_inertia=1.0, angle=0.0
-        )
+        m_debris_cano = m_sat_cano
+        i_debris_cano = i_sat_cano
+        self.target_debris = RigidBody(mass=m_debris_cano, position=np.array([r_debris, 0.0]),
+                                       velocity=np.array([0.0, v_debris]), moment_of_inertia=i_debris_cano, angle=0.0)
 
         self.engine.add_body(self.earth)
         self.engine.add_body(self.player_sat)
         self.engine.add_body(self.target_debris)
         self.engine.initialize()
+
+        self.max_thrust_cano = MAX_THRUST_NEWTON * NEWTON_TO_CANONICAL
+        self.max_torque_cano = MAX_TORQUE_NM * NM_TO_CANONICAL
 
     def _setup_view(self):
         """描画関連の初期化"""
@@ -104,12 +113,19 @@ class SpaceDebrisApp:
         
         keys = pygame.key.get_pressed()
 
+        # スロットル
+        if keys[pygame.K_UP]:
+            self.throttle = min(1.0, self.throttle + 0.01)
+        if keys[pygame.K_DOWN]:
+            self.throttle = max(0.01, self.throttle - 0.01)
+
         # 並進スラスター
+        thrust_mag = self.max_thrust_cano * self.throttle
         thrust_x, thrust_y = 0.0, 0.0
-        if keys[pygame.K_w]: thrust_x += THRUST_POWER
-        if keys[pygame.K_s]: thrust_x -= THRUST_POWER
-        if keys[pygame.K_a]: thrust_y += THRUST_POWER
-        if keys[pygame.K_d]: thrust_y -= THRUST_POWER
+        if keys[pygame.K_w]: thrust_x += thrust_mag
+        if keys[pygame.K_s]: thrust_x -= thrust_mag
+        if keys[pygame.K_a]: thrust_y += thrust_mag
+        if keys[pygame.K_d]: thrust_y -= thrust_mag
 
         if thrust_x != 0 or thrust_y != 0:
             self.player_sat.apply_local_force(thrust_x, thrust_y)
@@ -117,16 +133,13 @@ class SpaceDebrisApp:
         # 回転制御
         if self.sas_enabled:
             target_angle = math.atan2(self.player_sat.velocity[1], self.player_sat.velocity[0])
-            auto_torque = self.sas_controller.compute_torque(
-                current_angle=self.player_sat.angle,
-                target_angle=target_angle,
-                dt_tu=TIME_STEP_TU
-            )
-            auto_torque = np.clip(auto_torque, -TORQUE_POWER, TORQUE_POWER)
+            auto_torque = self.sas_controller.compute_torque(current_angle=self.player_sat.angle,
+                                                             target_angle=target_angle, dt_tu=TIME_STEP_TU)
+            auto_torque = np.clip(auto_torque, -self.max_torque_cano, self.max_torque_cano)
             self.player_sat.apply_torque(auto_torque)
         else:
-            if keys[pygame.K_q]: self.player_sat.apply_torque(TORQUE_POWER)
-            if keys[pygame.K_e]: self.player_sat.apply_torque(-TORQUE_POWER)
+            if keys[pygame.K_q]: self.player_sat.apply_torque(self.max_torque_cano)
+            if keys[pygame.K_e]: self.player_sat.apply_torque(-self.max_torque_cano)
 
     def update(self):
         """状態の更新"""
@@ -140,8 +153,7 @@ class SpaceDebrisApp:
         self.renderer.clear()
         self.renderer.draw_predictions(self.orbital_predictions, player=self.player_sat)
         self.renderer.draw_bodies(self.earth, self.player_sat, self.target_debris)
-        self.renderer.draw_ui(self.player_sat, self.target_debris, self.sas_enabled)
-        
+        self.renderer.draw_ui(self.player_sat, self.target_debris, self.sas_enabled, self.throttle)
         pygame.display.flip()
 
     def run(self):
