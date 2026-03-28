@@ -13,7 +13,11 @@ class RigidBody:
         velocity: np.ndarray,
         moment_of_inertia: float = 1.0,
         angle: float = 0.0,
-        is_fixed: bool = False
+        is_fixed: bool = False,
+        image_path: str = None,
+        real_width_du: float = 0.0,
+        real_height_du: float = 0.0,
+        draw_fixed_size_px: int = None
     ):
         """
         Args:
@@ -22,7 +26,11 @@ class RigidBody:
             velocity (np.ndarray): 2次元の速度ベクトル [vx, vy] (DU/TU)
             moment_of_inertia (float): 慣性モーメント
             angle (float): 角度（ラジアン）
-            is_fixed (bool): Trueの場合，物理エンジンによる位置更新を受け付けない．（地球用）
+            is_fixed (bool): Trueの場合，物理エンジンによる位置更新を受け付けない．
+            image_path (str): 画像ファイルのパス
+            real_width_du (float): DUベースの実寸法（幅）
+            real_height_du (float): DUベースの実寸法（高さ）
+            draw_fixed_size_px (int): マクロ視点での一定サイズ(ピクセル)
         """
         self.mass: float = mass
         self.position: np.ndarray = np.array(position, dtype=np.float64) # float64型を明示し，計算精度を確保．
@@ -39,6 +47,12 @@ class RigidBody:
         # 力のバッファ（毎フレームControllerからセットされ，物理エンジンが消費する．）
         self.applied_force = np.zeros(2, dtype=np.float64) # ワールド座標系での力
         self.applied_torque = 0.0 # トルク（回転力）
+
+        # ビジュアル情報
+        self.image_path = image_path
+        self.real_width_du = real_width_du
+        self.real_height_du = real_height_du
+        self.draw_fixed_size_px = draw_fixed_size_px
 
     def apply_local_force(self, force_local_x: float, force_local_y: float) -> None:
         """

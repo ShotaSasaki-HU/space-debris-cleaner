@@ -1,7 +1,7 @@
 # view/renderer.py
 import pygame
 import numpy as np
-import math
+from typing import Dict
 
 from physics.body import RigidBody
 from view.camera import Camera
@@ -20,6 +20,7 @@ class GameRenderer:
     def __init__(self, screen: pygame.Surface, camera: Camera):
         self.screen = screen
         self.camera = camera
+        self.image_cache: Dict[str, pygame.Surface] = {}
         self.font = pygame.font.SysFont("couriernew", 20)
         
         # 予測線描画用の透明サーフェス
@@ -43,58 +44,78 @@ class GameRenderer:
             
         self.screen.blit(self.prediction_surface, (0, 0))
 
-    def draw_bodies(self, earth: RigidBody, player: RigidBody, debris: RigidBody):
+    def draw_bodies(self, earth: RigidBody, player: RigidBody, debri: RigidBody):
         """宇宙の天体・オブジェクトを描画する"""
         # 地球
         earth_pos = self.camera.world_to_screen(earth.position)
         pygame.draw.circle(self.screen, COLOR_EARTH, earth_pos, int(1.0 * self.camera.pixels_per_du))
 
-        # デブリ
-        debris_size_du = 12.0 / self.camera.pixels_per_du
-        self._draw_debris(debris, COLOR_DEBRIS, size_du=debris_size_du)
+        self._draw_realistic_body(player)
+        self._draw_realistic_body(debri)
 
-        # プレイヤー
-        # 画面上でNピクセルの大きさになるように，現在のカメラのスケールから DU を逆算する．
-        player_size_du = 8.0 / self.camera.pixels_per_du
-        self._draw_satellite(player, COLOR_PLAYER, size_du=player_size_du)
+    def _draw_realistic_body(self, body: RigidBody):
+        """画像をロードし，視点に合わせてスケーリング・回転して描画する．"""
+        if body.image_path:
+            if body.image_path not in self.image_cache:
+                try:
+                    image = pygame.image.load(body.image_path).convert_alpha() # convert_alpha()で透過を有効にする．
+                    self.image_cache[body.image_path] = image
+                except pygame.error as e:
+                    print(f"Error loading image: {body.image_path}, {e}")
+                    body.image_path = None # ロードに失敗した場合は，画像パスをNoneにしてフォールバックする．
 
-    def _draw_debris(self, body: RigidBody, color: tuple, size_du: float):
-        """デブリを回転する四角形で描画する内部メソッド"""
-        half_s = size_du / 2.0
-        # ローカル座標系での4つの頂点
-        corners = [
-            np.array([ half_s,  half_s]),
-            np.array([-half_s,  half_s]),
-            np.array([-half_s, -half_s]),
-            np.array([ half_s, -half_s])
-        ]
-        
-        cos_t = math.cos(body.angle)
-        sin_t = math.sin(body.angle)
-        
-        points = []
-        for c in corners:
-            # 回転行列でローカル座標を回転
-            rx = c[0] * cos_t - c[1] * sin_t
-            ry = c[0] * sin_t + c[1] * cos_t
-            # ワールド座標に変換し，カメラに通す．
-            world_pos = body.position + np.array([rx, ry])
-            points.append(self.camera.world_to_screen(world_pos))
-            
-        pygame.draw.polygon(self.screen, color, points)
+            image: pygame.Surface = self.image_cache.get(body.image_path)
+            if image:
+                # スケーリングロジックの決定
+                # マクロ視点（Camera）の場合
+                if body.draw_fixed_size_px and isinstance(self.camera, Camera):
+                    # 画像のアスペクト比を維持してスケーリング
+                    orig_w, orig_h = image.get_size()
+                    target_size_px = body.draw_fixed_size_px
+                    if orig_w > orig_h:
+                        target_w = target_size_px
+                        target_h = int(orig_h * target_size_px / orig_w)
+                    else:
+                        target_h = target_size_px
+                        target_w = int(orig_w * target_size_px / orig_h)
 
-    def _draw_satellite(self, body: RigidBody, color: tuple, size_du: float):
-        """衛星を三角形で描画する内部メソッド"""
-        nose_offset = np.array([math.cos(body.angle), math.sin(body.angle)]) * size_du
-        left_offset = np.array([math.cos(body.angle + 2.44), math.sin(body.angle + 2.44)]) * size_du
-        right_offset = np.array([math.cos(body.angle - 2.44), math.sin(body.angle - 2.44)]) * size_du
+                    scaled_image = pygame.transform.smoothscale(image, (target_w, target_h))
+                    rotated_image = pygame.transform.rotate(scaled_image, np.rad2deg(body.angle))
 
-        points = [
-            self.camera.world_to_screen(body.position + nose_offset),
-            self.camera.world_to_screen(body.position + left_offset),
-            self.camera.world_to_screen(body.position + right_offset)
-        ]
-        pygame.draw.polygon(self.screen, color, points)
+                # 拡大視点（RelativeCamera）の場合
+                else:
+                    # まずは，原寸大でスケーリングしてみる．
+                    target_w = int(body.real_width_du * self.camera.pixels_per_du)
+                    target_h = int(body.real_height_du * self.camera.pixels_per_du)
+
+                    # 原寸大が小さすぎたら，固定サイズに変更する．
+                    if min(target_w, target_h) < body.draw_fixed_size_px:
+                        orig_w, orig_h = image.get_size()
+                        target_size_px = body.draw_fixed_size_px
+                        if orig_w > orig_h:
+                            target_w = target_size_px
+                            target_h = int(orig_h * target_size_px / orig_w)
+                        else:
+                            target_h = target_size_px
+                            target_w = int(orig_w * target_size_px / orig_h)
+
+                    scaled_image = pygame.transform.smoothscale(image, (target_w, target_h))
+
+                    # ターゲットの「地球に対する角度（位相）」を計算
+                    theta = np.atan2(self.camera.target_body.position[1], self.camera.target_body.position[0])
+                    rotated_image = pygame.transform.rotate(scaled_image, np.rad2deg((np.pi / 2) - theta + body.angle))
+                
+                screen_pos = self.camera.world_to_screen(body.position) # 物理エンジンの座標を画面座標へ変換
+                rotated_rect = rotated_image.get_rect() # 回転後の画像サイズを取得
+                draw_pos = (screen_pos[0] - rotated_rect.width // 2,
+                            screen_pos[1] - rotated_rect.height // 2) # 画像の中心座標を取得
+                
+                self.screen.blit(rotated_image, draw_pos)
+                return # リアル画像での描画に成功したら終了
+
+        # フォールバック（画像がない場合の描画）
+        body_screen_pos = self.camera.world_to_screen(body.position)
+        pygame.draw.rect(self.screen, (255, 255, 255), (body_screen_pos[0]-6, body_screen_pos[1]-6, 12, 12))
 
     def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float):
         """各種UIを描画する"""

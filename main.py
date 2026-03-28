@@ -19,8 +19,9 @@ FPS = 60
 PIXELS_PER_DU = 100.0
 TIME_STEP_TU = 0.01
 
-SAT_MASS_KG = 150.0  # Wet重量
-SAT_MOMENT_OF_INERTIA_KG_M2 = 25.0 
+CLEANER_SAT_MASS_KG = 150.0  # Wet重量
+CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2 = 25.0
+CLEANER_SAT_WIDTH_METER = 2.3
 
 MAX_THRUST_NEWTON = 100.0 # 最大推力（SI単位系）
 MAX_TORQUE_NM = 0.001 # 最大トルク（SI単位系）
@@ -54,21 +55,39 @@ class SpaceDebrisApp:
         
         r_player = METER_TO_DU * (EARTH_RADIUS_M + 10010e3)
         v_player = np.sqrt(G_CANONICAL * M_earth / r_player)
-        m_sat_cano = SAT_MASS_KG * KG_TO_MU
-        i_sat_cano = SAT_MOMENT_OF_INERTIA_KG_M2 * KG_TO_MU * (METER_TO_DU ** 2)
-        self.player_sat = RigidBody(mass=m_sat_cano, position=np.array([r_player, 0.0]),
-                                    velocity=np.array([0.0, v_player]), moment_of_inertia=i_sat_cano, angle=math.pi / 2.0)
+        m_sat_cano = CLEANER_SAT_MASS_KG * KG_TO_MU
+        i_sat_cano = CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2 * KG_TO_MU * (METER_TO_DU ** 2)
+        self.player_sat = RigidBody(
+            mass=m_sat_cano,
+            position=np.array([r_player, 0.0]),
+            velocity=np.array([0.0, v_player]),
+            moment_of_inertia=i_sat_cano,
+            angle=math.pi / 2.0,
+            image_path="assets/images/player_sat.png",
+            real_width_du=2.3 * METER_TO_DU,
+            real_height_du=1.95 * METER_TO_DU,
+            draw_fixed_size_px=30
+        )
 
-        r_debris = METER_TO_DU * (EARTH_RADIUS_M + 10000e3)
-        v_debris = np.sqrt(G_CANONICAL * M_earth / r_debris)
-        m_debris_cano = m_sat_cano
-        i_debris_cano = i_sat_cano
-        self.target_debris = RigidBody(mass=m_debris_cano, position=np.array([r_debris, 0.0]),
-                                       velocity=np.array([0.0, v_debris]), moment_of_inertia=i_debris_cano, angle=0.0)
+        r_2nd_stage = METER_TO_DU * (EARTH_RADIUS_M + 10000e3)
+        v_2nd_stage = np.sqrt(G_CANONICAL * M_earth / r_2nd_stage)
+        m_2nd_stage_cano = 3000 * KG_TO_MU # H-IIAロケット15号機の上段
+        i_2nd_stage_cano = 33250 * KG_TO_MU * (METER_TO_DU ** 2) # 円柱の中心軸に垂直な軸まわりの慣性モーメント
+        self.target_debri = RigidBody(
+            mass=m_2nd_stage_cano,
+            position=np.array([r_2nd_stage, 0.0]),
+            velocity=np.array([0.0, v_2nd_stage]),
+            moment_of_inertia=i_2nd_stage_cano,
+            angle=0.0,
+            image_path="assets/images/rocket_2nd_stage.png",
+            real_width_du=11.0 * METER_TO_DU,
+            real_height_du=4.0 * METER_TO_DU,
+            draw_fixed_size_px=30
+        )
 
         self.engine.add_body(self.earth)
         self.engine.add_body(self.player_sat)
-        self.engine.add_body(self.target_debris)
+        self.engine.add_body(self.target_debri)
         self.engine.initialize()
 
         self.max_thrust_cano = MAX_THRUST_NEWTON * NEWTON_TO_CANONICAL
@@ -79,10 +98,10 @@ class SpaceDebrisApp:
         self.macro_camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU)
 
         self.micro_camera = RelativeCamera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU * 100)
-        self.micro_camera.set_target(self.target_debris)
+        self.micro_camera.set_target(self.target_debri)
 
         self.nano_camera = RelativeCamera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU * 10000)
-        self.nano_camera.set_target(self.target_debris)
+        self.nano_camera.set_target(self.target_debri)
 
         self.renderer = GameRenderer(self.screen, self.macro_camera)
 
@@ -152,8 +171,8 @@ class SpaceDebrisApp:
         """画面の描画"""
         self.renderer.clear()
         self.renderer.draw_predictions(self.orbital_predictions, player=self.player_sat)
-        self.renderer.draw_bodies(self.earth, self.player_sat, self.target_debris)
-        self.renderer.draw_ui(self.player_sat, self.target_debris, self.sas_enabled, self.throttle)
+        self.renderer.draw_bodies(self.earth, self.player_sat, self.target_debri)
+        self.renderer.draw_ui(self.player_sat, self.target_debri, self.sas_enabled, self.throttle)
         pygame.display.flip()
 
     def run(self):
