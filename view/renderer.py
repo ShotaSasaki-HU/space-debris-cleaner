@@ -203,10 +203,10 @@ class GameRenderer:
         val_d = throttle if keys[pygame.K_d] else 0.0
 
         full_color = (255, 0, 0)
-        self._draw_normalized_bar_gauge(self.screen, cx - bar_w//2, cy - offset - bar_h//2, bar_w, bar_h, 0.0, val_w, full_color, "THR")
-        self._draw_normalized_bar_gauge(self.screen, cx - bar_w//2, cy + offset - bar_h//2, bar_w, bar_h, np.pi, val_s, full_color, "THR")
-        self._draw_normalized_bar_gauge(self.screen, cx - offset - bar_w//2, cy - bar_h//2, bar_w, bar_h, np.pi/2, val_a, full_color, "THR")
-        self._draw_normalized_bar_gauge(self.screen, cx + offset - bar_w//2, cy - bar_h//2, bar_w, bar_h, -np.pi/2, val_d, full_color, "THR")
+        self._draw_normalized_bar_gauge(self.screen, cx - bar_w//2, cy - offset - bar_h//2, bar_w, bar_h, 0.0, val_s, full_color, "THR")
+        self._draw_normalized_bar_gauge(self.screen, cx - bar_w//2, cy + offset - bar_h//2, bar_w, bar_h, np.pi, val_w, full_color, "THR")
+        self._draw_normalized_bar_gauge(self.screen, cx - offset - bar_w//2, cy - bar_h//2, bar_w, bar_h, np.pi/2, val_d, full_color, "THR")
+        self._draw_normalized_bar_gauge(self.screen, cx + offset - bar_w//2, cy - bar_h//2, bar_w, bar_h, -np.pi/2, val_a, full_color, "THR")
 
     def _draw_normalized_bar_gauge(self, screen: pygame.Surface, x: int, y: int, w: int, h: int,
                                    angle: float, input: float, full_color: tuple, label: str | None):
