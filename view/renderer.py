@@ -160,23 +160,96 @@ class GameRenderer:
         self.screen.blit(self.font.render("Q/E: Manual Rotation (SAS OFF) | T: Toggle SAS", True, help_color), (20, 80))
 
         # スロットルゲージの描画
-        bar_w = 20
-        bar_h = 200
-        x = self.screen.get_width() - 40
-        y = self.screen.get_height() - bar_h - 40
+        bar_w = 50
+        bar_h = 150
+        x = self.screen.get_width() - 300
+        y = self.screen.get_height() - 300
         
-        # 外枠
-        pygame.draw.rect(self.screen, (100, 100, 100), (x, y, bar_w, bar_h), 2)
+        self._draw_normalized_bar_gauge(self.screen, x, y, bar_w, bar_h, np.deg2rad(-90), throttle, (255, 0, 0), 'Throttle')
+
+    def _draw_normalized_bar_gauge(self, screen: pygame.Surface, x: int, y: int, w: int, h: int,
+                                   angle: float, input: float, full_color: tuple, label: str | None):
+        """
+        ゲージコンポーネント
+
+        Args:
+            screen (pygame.Surface): 描画先
+            x (int): バーゲージ左上のx座標
+            y (int): バーゲージ左上のy座標
+            w (int): 幅
+            h (int): 高さ
+            angle (float): バーゲージ左上まわりの回転角度（ラジアン）
+            input (float): 入力値（0.0~1.0）
+            full_color (tuple): inputが1.0の時の色
+            label (str | None): 表示するテキスト
+        """
+        input = np.clip(input, 0.0, 1.0)
+
+        # inputが0なら白，1ならfull_color．
+        color = (
+            -((255 - full_color[0]) * input) + 255,
+            -((255 - full_color[1]) * input) + 255,
+            -((255 - full_color[2]) * input) + 255
+        )
+
+        # バーゲージ本体
+        fill_h = int(h * input)
+        gauge_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(gauge_surf, (100, 100, 100), (0, 0, w, h), 2) # 外枠
+        pygame.draw.rect(gauge_surf, color, (0, h - fill_h, w, fill_h)) # 塗りつぶし
+        rotated_surf = pygame.transform.rotate(gauge_surf, np.degrees(angle))
+        gauge_rect = rotated_surf.get_rect(center=(x + (w // 2), y + (h // 2))) # 座標を指定してRectを生成
+        screen.blit(rotated_surf, gauge_rect.topleft) # 転写
+
+        # テキスト表示ココカラ
+        percent_text = f"{int(input * 100)}%"
+        percent_surf = self.font.render(percent_text, True, COLOR_UI_TEXT)
+        percent_w, percent_h = percent_surf.get_size()
+
+        # フォント高さ
+        line_h = self.font.get_linesize()
+        spacing = int(line_h * 0.2) # 余白
+
+        if label:
+            label_surf = self.font.render(label, True, COLOR_UI_TEXT)
+            label_w, label_h = label_surf.get_size()
+            
+            # ラベルとパーセンテージを合わせた全体のバウンディングボックス寸法
+            total_text_w = max(percent_w, label_w)
+            total_text_h = label_h + spacing + percent_h
+        else:
+            label_surf = None
+            total_text_w = percent_w
+            total_text_h = percent_h
+
+        # 動的半径の計算と基準位置の決定
+        theta = (np.pi / 2) + angle
+        dir_x = np.cos(theta)
+        dir_y = -np.sin(theta)
+
+        # テキストボックスの指定方向への投影半径（出っ張り具合）を計算
+        text_radius = (total_text_w / 2.0) * abs(dir_x) + (total_text_h / 2.0) * abs(dir_y)
+        padding = 6 # テキストとゲージの間の余白（ピクセル）
         
-        # 中身（スロットル値に応じて高さと色を変える）
-        fill_h = int(bar_h * throttle)
-        fill_y = y + bar_h - fill_h
-        if throttle > 0.8: color = (255, 100, 100)
-        elif throttle > 0.2: color = (255, 255, 100)
-        else: color = (100, 255, 100)
-        
-        pygame.draw.rect(self.screen, color, (x, fill_y, bar_w, fill_h))
-        
-        # テキスト表示
-        throttle_text = self.font.render(f"THRUST:{int(throttle*100):3d}%", True, COLOR_UI_TEXT)
-        self.screen.blit(throttle_text, (x - 140, y - 25))
+        # ゲージ中心からの必要最低距離
+        safe_radius = (h / 2.0) + text_radius + padding
+
+        # 安全な基準位置（テキストブロックの中心点）
+        base_x = gauge_rect.centerx + (safe_radius * dir_x)
+        base_y = gauge_rect.centery + (safe_radius * dir_y)
+
+        if label_surf:
+            # ブロックの中心から，それぞれのテキストの中心位置を逆算して配置．
+            label_center_y = base_y - (total_text_h / 2) + (label_h / 2)
+            percent_center_y = base_y + (total_text_h / 2) - (percent_h / 2)
+            
+            label_rect = label_surf.get_rect(center=(base_x, label_center_y))
+            percent_rect = percent_surf.get_rect(center=(base_x, percent_center_y))
+            
+            screen.blit(label_surf, label_rect.topleft)
+            screen.blit(percent_surf, percent_rect.topleft)
+        else:
+            percent_rect = percent_surf.get_rect(center=(base_x, base_y))
+            screen.blit(percent_surf, percent_rect.topleft)
+
+        return
