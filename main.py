@@ -157,8 +157,8 @@ class SpaceDebrisApp:
             auto_torque = np.clip(auto_torque, -self.max_torque_cano, self.max_torque_cano)
             self.player_sat.apply_torque(auto_torque)
         else:
-            if keys[pygame.K_q]: self.player_sat.apply_torque(self.max_torque_cano)
-            if keys[pygame.K_e]: self.player_sat.apply_torque(-self.max_torque_cano)
+            if keys[pygame.K_q]: self.player_sat.apply_torque(self.max_torque_cano * self.throttle)
+            if keys[pygame.K_e]: self.player_sat.apply_torque(-self.max_torque_cano * self.throttle)
 
     def update(self):
         """状態の更新"""
