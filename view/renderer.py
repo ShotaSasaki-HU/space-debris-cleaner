@@ -120,7 +120,7 @@ class GameRenderer:
     def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float):
         """各種UIを描画する"""
         self._draw_rel_nav_ui(player, target)
-        self._draw_control_console(sas_enabled, throttle)
+        self._draw_control_console(sas_enabled, throttle, player)
 
     def _draw_rel_nav_ui(self, player: RigidBody, target: RigidBody):
         """相対ナビゲーションUI"""
@@ -145,7 +145,7 @@ class GameRenderer:
             text_surf = self.font.render(line, True, color)
             self.screen.blit(text_surf, (20, y_offset + i * 22))
 
-    def _draw_control_console(self, sas_enabled: bool, throttle: float):
+    def _draw_control_console(self, sas_enabled: bool, throttle: float, player: RigidBody):
         """操作に関するテキスト表示"""
         # UIの一番上に現在のカメラモードを描画
         mode_text = "VIEW: " + ("MACRO (Absolute)" if isinstance(self.camera, Camera) else "MICRO/NANO (Relative)")
@@ -159,13 +159,54 @@ class GameRenderer:
         self.screen.blit(self.font.render("W/S: Forward/Backward | A/D: Left/Right", True, help_color), (20, 60))
         self.screen.blit(self.font.render("Q/E: Manual Rotation (SAS OFF) | T: Toggle SAS", True, help_color), (20, 80))
 
-        # スロットルゲージの描画
-        bar_w = 50
-        bar_h = 150
-        x = self.screen.get_width() - 300
-        y = self.screen.get_height() - 300
+        main_bar_w = 50
+        main_bar_h = 150
+        mx = self.screen.get_width() - 200
+        my = self.screen.get_height() - 200
+        self._draw_normalized_bar_gauge(self.screen, mx, my, main_bar_w, main_bar_h, np.deg2rad(0), throttle, (255, 0, 0), 'Throttle')
+
+        # ==========================================
+        # スラスター噴射テレメトリー
+        # ==========================================
+        cx = 150
+        cy = self.screen.get_size()[1] // 2
         
-        self._draw_normalized_bar_gauge(self.screen, x, y, bar_w, bar_h, np.deg2rad(-90), throttle, (255, 0, 0), 'Throttle')
+        # プレイヤー画像の描画（常に上向き）
+        if player.image_path and player.image_path in self.image_cache:
+            image = self.image_cache[player.image_path]
+            # UI用に固定サイズ(約60x60)にスケーリング
+            orig_w, orig_h = image.get_size()
+            scale_factor = 60.0 / max(orig_w, orig_h)
+            hud_img = pygame.transform.smoothscale(image, (int(orig_w * scale_factor), int(orig_h * scale_factor)))
+            
+            # 画像のデフォルト（右向き）を上向きに回転させて表示
+            hud_img = pygame.transform.rotate(hud_img, 90)
+            img_rect = hud_img.get_rect(center=(cx, cy))
+            self.screen.blit(hud_img, img_rect.topleft)
+        else:
+            # フォールバックの三角形
+            pygame.draw.polygon(self.screen, COLOR_PLAYER, [
+                (cx, cy - 30), (cx - 20, cy + 20), (cx + 20, cy + 20)
+            ])
+
+        keys = pygame.key.get_pressed()
+        
+        # 4方向のバーゲージの描画
+        bar_w = 20
+        bar_h = 50
+        offset = 60 # 画像中心からの距離
+
+        # 噴射時はスロットル値に比例，非噴射時は0．
+        val_w = throttle if keys[pygame.K_w] else 0.0
+        val_s = throttle if keys[pygame.K_s] else 0.0
+        val_a = throttle if keys[pygame.K_a] else 0.0
+        val_d = throttle if keys[pygame.K_d] else 0.0
+
+        full_color = (255, 0, 0)
+        self._draw_normalized_bar_gauge(self.screen, cx - bar_w//2, cy - offset - bar_h//2, bar_w, bar_h, 0.0, val_w, full_color, "THR")
+        self._draw_normalized_bar_gauge(self.screen, cx - bar_w//2, cy + offset - bar_h//2, bar_w, bar_h, np.pi, val_s, full_color, "THR")
+        self._draw_normalized_bar_gauge(self.screen, cx - offset - bar_w//2, cy - bar_h//2, bar_w, bar_h, np.pi/2, val_a, full_color, "THR")
+        self._draw_normalized_bar_gauge(self.screen, cx + offset - bar_w//2, cy - bar_h//2, bar_w, bar_h, -np.pi/2, val_d, full_color, "THR")
 
     def _draw_normalized_bar_gauge(self, screen: pygame.Surface, x: int, y: int, w: int, h: int,
                                    angle: float, input: float, full_color: tuple, label: str | None):
