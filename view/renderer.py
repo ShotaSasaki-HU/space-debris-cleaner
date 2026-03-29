@@ -203,47 +203,47 @@ class GameRenderer:
         val_d = throttle if keys[pygame.K_d] else 0.0
 
         full_color = (255, 0, 0)
-        self._draw_normalized_bar_gauge(self.screen, cx - bar_w//2, cy - offset - bar_h//2, bar_w, bar_h, 0.0, val_s, full_color, "THR")
-        self._draw_normalized_bar_gauge(self.screen, cx - bar_w//2, cy + offset - bar_h//2, bar_w, bar_h, np.pi, val_w, full_color, "THR")
-        self._draw_normalized_bar_gauge(self.screen, cx - offset - bar_w//2, cy - bar_h//2, bar_w, bar_h, np.pi/2, val_d, full_color, "THR")
-        self._draw_normalized_bar_gauge(self.screen, cx + offset - bar_w//2, cy - bar_h//2, bar_w, bar_h, -np.pi/2, val_a, full_color, "THR")
+        self._draw_normalized_bar_gauge(self.screen, cx, cy - offset, bar_w, bar_h, 0.0, val_s, full_color, "THR") # 上
+        self._draw_normalized_bar_gauge(self.screen, cx, cy + offset, bar_w, bar_h, np.pi, val_w, full_color, "THR") # 下
+        self._draw_normalized_bar_gauge(self.screen, cx - offset, cy, bar_w, bar_h, np.pi/2, val_d, full_color, "THR") # 左
+        self._draw_normalized_bar_gauge(self.screen, cx + offset, cy, bar_w, bar_h, -np.pi/2, val_a, full_color, "THR") # 右
 
-    def _draw_normalized_bar_gauge(self, screen: pygame.Surface, x: int, y: int, w: int, h: int,
-                                   angle: float, input: float, full_color: tuple, label: str | None):
+    def _draw_normalized_bar_gauge(self, screen: pygame.Surface, cx: int, cy: int, w: int, h: int,
+                                   angle: float, input_val: float, full_color: tuple, label: str | None):
         """
         ゲージコンポーネント
 
         Args:
             screen (pygame.Surface): 描画先
-            x (int): バーゲージ左上のx座標
-            y (int): バーゲージ左上のy座標
+            cx (int): バーゲージ中心のx座標
+            cy (int): バーゲージ中心のy座標
             w (int): 幅
             h (int): 高さ
             angle (float): バーゲージ左上まわりの回転角度（ラジアン）
-            input (float): 入力値（0.0~1.0）
+            input_val (float): 入力値（0.0~1.0）
             full_color (tuple): inputが1.0の時の色
             label (str | None): 表示するテキスト
         """
-        input = np.clip(input, 0.0, 1.0)
+        input_val = np.clip(input_val, 0.0, 1.0)
 
         # inputが0なら白，1ならfull_color．
         color = (
-            -((255 - full_color[0]) * input) + 255,
-            -((255 - full_color[1]) * input) + 255,
-            -((255 - full_color[2]) * input) + 255
+            -((255 - full_color[0]) * input_val) + 255,
+            -((255 - full_color[1]) * input_val) + 255,
+            -((255 - full_color[2]) * input_val) + 255
         )
 
         # バーゲージ本体
-        fill_h = int(h * input)
+        fill_h = int(h * input_val)
         gauge_surf = pygame.Surface((w, h), pygame.SRCALPHA)
         pygame.draw.rect(gauge_surf, (100, 100, 100), (0, 0, w, h), 2) # 外枠
         pygame.draw.rect(gauge_surf, color, (0, h - fill_h, w, fill_h)) # 塗りつぶし
         rotated_surf = pygame.transform.rotate(gauge_surf, np.degrees(angle))
-        gauge_rect = rotated_surf.get_rect(center=(x + (w // 2), y + (h // 2))) # 座標を指定してRectを生成
+        gauge_rect = rotated_surf.get_rect(center=(cx, cy)) # 座標を指定してRectを生成
         screen.blit(rotated_surf, gauge_rect.topleft) # 転写
 
         # テキスト表示ココカラ
-        percent_text = f"{int(input * 100)}%"
+        percent_text = f"{int(input_val * 100)}%"
         percent_surf = self.font.render(percent_text, True, COLOR_UI_TEXT)
         percent_w, percent_h = percent_surf.get_size()
 
