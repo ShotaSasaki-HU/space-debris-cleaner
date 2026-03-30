@@ -6,7 +6,11 @@ import math
 
 from physics.engine import GravityEngine
 from physics.body import RigidBody
-from physics.constants import KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL, SEC_TO_TU
+from physics.constants import (
+    KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL,
+    CLEANER_SAT_MASS_KG, CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2, CLEANER_SAT_SIZE_METER,
+    MAX_THRUST_NEWTON, MAX_TORQUE_NM, NEWTON_TO_CANONICAL, NM_TO_CANONICAL
+)
 from physics.control import PIDController
 
 from view.camera import Camera, RelativeCamera
@@ -18,16 +22,6 @@ SCREEN_HEIGHT = 720
 FPS = 60
 PIXELS_PER_DU = 100.0
 TIME_STEP_TU = 0.01
-
-CLEANER_SAT_MASS_KG = 150.0  # Wet重量
-CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2 = 25.0
-CLEANER_SAT_WIDTH_METER = 2.3
-
-MAX_THRUST_NEWTON = 100.0 # 最大推力（SI単位系）
-MAX_TORQUE_NM = 0.001 # 最大トルク（SI単位系）
-
-NEWTON_TO_CANONICAL = KG_TO_MU * METER_TO_DU / (SEC_TO_TU ** 2)
-NM_TO_CANONICAL = NEWTON_TO_CANONICAL * METER_TO_DU
 
 class SpaceDebrisApp:
     """
@@ -64,8 +58,8 @@ class SpaceDebrisApp:
             moment_of_inertia=i_sat_cano,
             angle=math.pi / 2.0,
             image_path="assets/images/player_sat.png",
-            real_width_du=2.3 * METER_TO_DU,
-            real_height_du=1.95 * METER_TO_DU,
+            real_width_du=CLEANER_SAT_SIZE_METER[0] * METER_TO_DU,
+            real_height_du=CLEANER_SAT_SIZE_METER[1] * METER_TO_DU,
             draw_fixed_size_px=30
         )
 

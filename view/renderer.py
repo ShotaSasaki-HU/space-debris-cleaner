@@ -5,7 +5,7 @@ from typing import Dict
 
 from physics.body import RigidBody
 from view.camera import Camera
-from physics.constants import METER_TO_DU, SEC_TO_TU
+from physics.constants import METER_TO_DU, SEC_TO_TU, MAX_THRUST_NEWTON, MAX_TORQUE_NM
 
 COLOR_EARTH = (50, 150, 255)
 COLOR_PLAYER = (0, 255, 0)
@@ -159,11 +159,9 @@ class GameRenderer:
         self.screen.blit(self.font.render("W/S: Forward/Backward | A/D: Left/Right", True, help_color), (20, 60))
         self.screen.blit(self.font.render("Q/E: Manual Rotation (SAS OFF) | T: Toggle SAS", True, help_color), (20, 80))
 
-        main_bar_w = 50
-        main_bar_h = 150
-        mx = self.screen.get_width() - 200
-        my = self.screen.get_height() - 200
-        self._draw_normalized_bar_gauge(self.screen, mx, my, main_bar_w, main_bar_h, np.deg2rad(0), throttle, (255, 0, 0), 'Throttle')
+        # スロットル
+        self._draw_bar_gauge(screen=self.screen, cx=self.screen.get_width() - 200, cy=self.screen.get_height() - 200, w=50, h=150, angle=0.0,
+                             min_val=0.0, max_val=1.0, input_val=throttle, full_color=(255, 0, 0), stack_labels=['Throttle', f'{throttle * 100:.0f}%'])
 
         # ==========================================
         # スラスター噴射テレメトリー
@@ -202,14 +200,23 @@ class GameRenderer:
         val_a = throttle if keys[pygame.K_a] else 0.0
         val_d = throttle if keys[pygame.K_d] else 0.0
 
-        full_color = (255, 0, 0)
-        self._draw_normalized_bar_gauge(self.screen, cx, cy - offset, bar_w, bar_h, 0.0, val_s, full_color, "THR") # 上
-        self._draw_normalized_bar_gauge(self.screen, cx, cy + offset, bar_w, bar_h, np.pi, val_w, full_color, "THR") # 下
-        self._draw_normalized_bar_gauge(self.screen, cx - offset, cy, bar_w, bar_h, np.pi/2, val_d, full_color, "THR") # 左
-        self._draw_normalized_bar_gauge(self.screen, cx + offset, cy, bar_w, bar_h, -np.pi/2, val_a, full_color, "THR") # 右
+        for theta, val_i in zip(np.arange(0, -2 * np.pi, -np.pi / 2), [val_a, val_s, val_d, val_w]):
+            self._draw_bar_gauge(
+                screen=self.screen,
+                cx=cx + (offset * np.cos(theta)), # Y軸の正方向が下向きである事に注意
+                cy=cy + (offset * np.sin(theta)),
+                w=bar_w,
+                h=bar_h,
+                angle=-theta - (np.pi / 2),
+                min_val=0.0,
+                max_val=1.0,
+                input_val=val_i,
+                full_color=(255, 0, 0),
+                stack_labels=['THR', f'{MAX_THRUST_NEWTON * val_i:.1f} N']
+            )
 
-    def _draw_normalized_bar_gauge(self, screen: pygame.Surface, cx: int, cy: int, w: int, h: int,
-                                   angle: float, input_val: float, full_color: tuple, label: str | None):
+    def _draw_bar_gauge(self, screen: pygame.Surface, cx: int, cy: int, w: int, h: int, angle: float,
+                        min_val: float, max_val: float, input_val: float, full_color: tuple, stack_labels: list[str]):
         """
         ゲージコンポーネント
 
@@ -220,21 +227,20 @@ class GameRenderer:
             w (int): 幅
             h (int): 高さ
             angle (float): バーゲージ左上まわりの回転角度（ラジアン）
-            input_val (float): 入力値（0.0~1.0）
+            min_val (float): 最小値
+            max_val (float): 最大値
+            input_val (float): 入力値
             full_color (tuple): inputが1.0の時の色
-            label (str | None): 表示するテキスト
+            stack_labels (list[str]): 縦積みで表示するテキスト
         """
-        input_val = np.clip(input_val, 0.0, 1.0)
+        input_val = np.clip(input_val, min_val, max_val)
+        normalized_input_val = (input_val - min_val) / (max_val - min_val)
 
         # inputが0なら白，1ならfull_color．
-        color = (
-            -((255 - full_color[0]) * input_val) + 255,
-            -((255 - full_color[1]) * input_val) + 255,
-            -((255 - full_color[2]) * input_val) + 255
-        )
+        color = tuple(-((255 - ch) * normalized_input_val) + 255 for ch in full_color)
 
         # バーゲージ本体
-        fill_h = int(h * input_val)
+        fill_h = int(h * normalized_input_val)
         gauge_surf = pygame.Surface((w, h), pygame.SRCALPHA)
         pygame.draw.rect(gauge_surf, (100, 100, 100), (0, 0, w, h), 2) # 外枠
         pygame.draw.rect(gauge_surf, color, (0, h - fill_h, w, fill_h)) # 塗りつぶし
@@ -242,26 +248,18 @@ class GameRenderer:
         gauge_rect = rotated_surf.get_rect(center=(cx, cy)) # 座標を指定してRectを生成
         screen.blit(rotated_surf, gauge_rect.topleft) # 転写
 
-        # テキスト表示ココカラ
-        percent_text = f"{int(input_val * 100)}%"
-        percent_surf = self.font.render(percent_text, True, COLOR_UI_TEXT)
-        percent_w, percent_h = percent_surf.get_size()
+        # --- ラベル表示ココカラ ---
 
-        # フォント高さ
-        line_h = self.font.get_linesize()
+        if not stack_labels: return # ラベルが無ければ終了
+
+        line_h = self.font.get_linesize() # フォント高さ
         spacing = int(line_h * 0.2) # 余白
 
-        if label:
-            label_surf = self.font.render(label, True, COLOR_UI_TEXT)
-            label_w, label_h = label_surf.get_size()
-            
-            # ラベルとパーセンテージを合わせた全体のバウンディングボックス寸法
-            total_text_w = max(percent_w, label_w)
-            total_text_h = label_h + spacing + percent_h
-        else:
-            label_surf = None
-            total_text_w = percent_w
-            total_text_h = percent_h
+        label_surfs = [self.font.render(label, True, COLOR_UI_TEXT) for label in stack_labels] # 各ラベルに対するサーフェス
+
+        # ラベル群全体のバウンディングボックス寸法
+        total_text_w = max([surf.get_size()[0] for surf in label_surfs])
+        total_text_h = sum([surf.get_size()[1] for surf in label_surfs]) + (spacing * (len(stack_labels) - 1))
 
         # 動的半径の計算と基準位置の決定
         theta = (np.pi / 2) + angle
@@ -279,18 +277,13 @@ class GameRenderer:
         base_x = gauge_rect.centerx + (safe_radius * dir_x)
         base_y = gauge_rect.centery + (safe_radius * dir_y)
 
-        if label_surf:
-            # ブロックの中心から，それぞれのテキストの中心位置を逆算して配置．
-            label_center_y = base_y - (total_text_h / 2) + (label_h / 2)
-            percent_center_y = base_y + (total_text_h / 2) - (percent_h / 2)
-            
+        # 各ラベルの中心位置を計算して配置
+        total_text_y_top = base_y - (total_text_h / 2)
+        for i, label_surf in enumerate(label_surfs):
+            label_center_y = total_text_y_top + ((2 * i) + 1) * (line_h / 2)
             label_rect = label_surf.get_rect(center=(base_x, label_center_y))
-            percent_rect = percent_surf.get_rect(center=(base_x, percent_center_y))
-            
             screen.blit(label_surf, label_rect.topleft)
-            screen.blit(percent_surf, percent_rect.topleft)
-        else:
-            percent_rect = percent_surf.get_rect(center=(base_x, base_y))
-            screen.blit(percent_surf, percent_rect.topleft)
+
+        # --- ラベル表示ココマデ ---
 
         return
