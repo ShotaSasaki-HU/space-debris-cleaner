@@ -5,7 +5,7 @@ from typing import Dict
 
 from physics.body import RigidBody
 from view.camera import Camera
-from physics.constants import METER_TO_DU, SEC_TO_TU, MAX_THRUST_NEWTON, MAX_TORQUE_NM
+from physics.constants import METER_TO_DU, SEC_TO_TU, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL
 
 COLOR_EARTH = (50, 150, 255)
 COLOR_PLAYER = (0, 255, 0)
@@ -117,10 +117,10 @@ class GameRenderer:
         body_screen_pos = self.camera.world_to_screen(body.position)
         pygame.draw.rect(self.screen, (255, 255, 255), (body_screen_pos[0]-6, body_screen_pos[1]-6, 12, 12))
 
-    def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float):
+    def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float, player_torque: float):
         """各種UIを描画する"""
         self._draw_rel_nav_ui(player, target)
-        self._draw_control_console(sas_enabled, throttle, player)
+        self._draw_control_console(sas_enabled, throttle, player, player_torque)
 
     def _draw_rel_nav_ui(self, player: RigidBody, target: RigidBody):
         """相対ナビゲーションUI"""
@@ -145,7 +145,7 @@ class GameRenderer:
             text_surf = self.font.render(line, True, color)
             self.screen.blit(text_surf, (20, y_offset + i * 22))
 
-    def _draw_control_console(self, sas_enabled: bool, throttle: float, player: RigidBody):
+    def _draw_control_console(self, sas_enabled: bool, throttle: float, player: RigidBody, player_torque: float):
         """操作に関するテキスト表示"""
         # UIの一番上に現在のカメラモードを描画
         mode_text = "VIEW: " + ("MACRO (Absolute)" if isinstance(self.camera, Camera) else "MICRO/NANO (Relative)")
@@ -163,10 +163,9 @@ class GameRenderer:
         self._draw_bar_gauge(screen=self.screen, cx=self.screen.get_width() - 200, cy=self.screen.get_height() - 200, w=50, h=150, angle=0.0,
                              min_val=0.0, max_val=1.0, input_val=throttle, full_color=(255, 0, 0), stack_labels=['Throttle', f'{throttle * 100:.0f}%'])
 
-        # ==========================================
-        # スラスター噴射テレメトリー
-        # ==========================================
-        cx = 150
+        # --- スラスター動作状況ココカラ ---
+
+        cx = 180
         cy = self.screen.get_size()[1] // 2
         
         # プレイヤー画像の描画（常に上向き）
@@ -214,6 +213,48 @@ class GameRenderer:
                 full_color=(255, 0, 0),
                 stack_labels=['THR', f'{MAX_THRUST_NEWTON * val_i:.1f} N']
             )
+        
+        ## --- トルク表示ココカラ ---
+
+        bar_w = 10
+        bar_h = offset
+
+        torque_nm = player_torque / NM_TO_CANONICAL
+        val_ccw = max(0.0, torque_nm)
+        val_cw = max(0.0, -torque_nm)
+
+        # 正のトルク（CCW）
+        self._draw_bar_gauge(
+            screen=self.screen,
+            cx=cx - (bar_h / 2),
+            cy=cy - offset - 100,
+            w=bar_w,
+            h=bar_h,
+            angle=np.pi / 2,
+            min_val=0.0,
+            max_val=MAX_TORQUE_NM,
+            input_val=val_ccw,
+            full_color=(0, 255, 0),
+            stack_labels=[f'{val_ccw:.3f} N·m']
+        )
+        # 負のトルク（CW）
+        self._draw_bar_gauge(
+            screen=self.screen,
+            cx=cx + (bar_h / 2),
+            cy=cy - offset - 100,
+            w=bar_w,
+            h=bar_h,
+            angle=-np.pi / 2,
+            min_val=0.0,
+            max_val=MAX_TORQUE_NM,
+            input_val=val_cw,
+            full_color=(0, 255, 0),
+            stack_labels=[f'{-val_cw:.3f} N·m']
+        )
+
+        ## --- トルク表示ココマデ ---
+
+        # --- スラスター動作状況ココマデ ---
 
     def _draw_bar_gauge(self, screen: pygame.Surface, cx: int, cy: int, w: int, h: int, angle: float,
                         min_val: float, max_val: float, input_val: float, full_color: tuple, stack_labels: list[str]):

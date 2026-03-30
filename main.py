@@ -2,12 +2,11 @@
 import pygame
 import sys
 import numpy as np
-import math
 
 from physics.engine import GravityEngine
 from physics.body import RigidBody
 from physics.constants import (
-    KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL,
+    KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL, TU_TO_SEC,
     CLEANER_SAT_MASS_KG, CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2, CLEANER_SAT_SIZE_METER,
     MAX_THRUST_NEWTON, MAX_TORQUE_NM, NEWTON_TO_CANONICAL, NM_TO_CANONICAL
 )
@@ -21,7 +20,7 @@ SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
 PIXELS_PER_DU = 100.0
-TIME_STEP_TU = 0.01
+TIME_STEP_TU = 0.001 # 1 / (806.80415 * FPS)
 
 class SpaceDebrisApp:
     """
@@ -56,7 +55,7 @@ class SpaceDebrisApp:
             position=np.array([r_player, 0.0]),
             velocity=np.array([0.0, v_player]),
             moment_of_inertia=i_sat_cano,
-            angle=math.pi / 2.0,
+            angle=np.pi / 2.0,
             image_path="assets/images/player_sat.png",
             real_width_du=CLEANER_SAT_SIZE_METER[0] * METER_TO_DU,
             real_height_du=CLEANER_SAT_SIZE_METER[1] * METER_TO_DU,
@@ -102,7 +101,7 @@ class SpaceDebrisApp:
     def _setup_controls(self):
         """入力制御系の初期化"""
         self.sas_enabled = False
-        self.sas_controller = PIDController(kp=1.0, ki=0.0, kd=1.0)
+        self.sas_controller = PIDController(kp=0.5, ki=0.0, kd=5.0)
 
     def handle_events(self):
         """ユーザー入力の処理"""
@@ -144,15 +143,25 @@ class SpaceDebrisApp:
             self.player_sat.apply_local_force(thrust_x, thrust_y)
         
         # 回転制御
+        self.player_torque = 0.0
         if self.sas_enabled:
-            target_angle = math.atan2(self.player_sat.velocity[1], self.player_sat.velocity[0])
-            auto_torque = self.sas_controller.compute_torque(current_angle=self.player_sat.angle,
-                                                             target_angle=target_angle, dt_tu=TIME_STEP_TU)
-            auto_torque = np.clip(auto_torque, -self.max_torque_cano, self.max_torque_cano)
-            self.player_sat.apply_torque(auto_torque)
+            target_angle = np.atan2(self.player_sat.velocity[1], self.player_sat.velocity[0])
+            
+            omega_si = self.player_sat.angular_velocity / TU_TO_SEC
+            dt_si = TIME_STEP_TU * TU_TO_SEC
+
+            # フライトコンピュータは馴染みのあるSI単位系で計算
+            auto_torque_nm = self.sas_controller.compute_torque(current_angle=self.player_sat.angle, target_angle=target_angle,
+                                                                current_angular_velocity=omega_si, dt_sec=dt_si)
+            
+            # 得られたトルク（N·m）をカノニカル単位系に変換して物理エンジンに渡す．
+            print(auto_torque_nm)
+            auto_torque_cano = auto_torque_nm * NM_TO_CANONICAL
+            self.player_torque = np.clip(auto_torque_cano, -self.max_torque_cano, self.max_torque_cano)
         else:
-            if keys[pygame.K_q]: self.player_sat.apply_torque(self.max_torque_cano * self.throttle)
-            if keys[pygame.K_e]: self.player_sat.apply_torque(-self.max_torque_cano * self.throttle)
+            if keys[pygame.K_q]: self.player_torque = self.max_torque_cano * self.throttle
+            if keys[pygame.K_e]: self.player_torque = -self.max_torque_cano * self.throttle
+        self.player_sat.apply_torque(self.player_torque)
 
     def update(self):
         """状態の更新"""
@@ -166,7 +175,7 @@ class SpaceDebrisApp:
         self.renderer.clear()
         self.renderer.draw_predictions(self.orbital_predictions, player=self.player_sat)
         self.renderer.draw_bodies(self.earth, self.player_sat, self.target_debri)
-        self.renderer.draw_ui(self.player_sat, self.target_debri, self.sas_enabled, self.throttle)
+        self.renderer.draw_ui(self.player_sat, self.target_debri, self.sas_enabled, self.throttle, self.player_torque)
         pygame.display.flip()
 
     def run(self):
