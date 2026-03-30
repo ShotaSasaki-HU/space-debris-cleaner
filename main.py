@@ -20,9 +20,7 @@ SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
 PIXELS_PER_DU = 100.0
-
 TIME_STEP_TU_PHYSICS = (1 / FPS) * SEC_TO_TU # 物理エンジンの微小ステップ幅
-TIME_STEP_TU_PER_FRAME = (1 / FPS) * SEC_TO_TU # 1フレームあたりのステップ幅（等倍速では現実時間と同期）
 
 class SpaceDebrisApp:
     """
@@ -180,16 +178,26 @@ class SpaceDebrisApp:
             if keys[pygame.K_e]: self.player_torque = -self.max_torque_cano * self.throttle
         self.player_sat.apply_torque(self.player_torque)
 
-    def update(self):
-        """状態の更新"""
-        self.time_accumulator += TIME_STEP_TU_PER_FRAME * self.fast_forward_rate
+    def update(self, dt_real_sec: float):
+        """
+        Args:
+            dt_real_sec (float): 前フレームから経過した現実の時間（秒）
+        """
+        self.time_accumulator += dt_real_sec * SEC_TO_TU * self.fast_forward_rate
 
-        while self.time_accumulator >= TIME_STEP_TU_PHYSICS:
-            self._apply_control_forces(dt_tu=TIME_STEP_TU_PHYSICS) # ユーザによる並進・回転入力の評価
-            self.engine.step() # 初期化時のtime_stepでTIME_STEP_TU_PHYSICSを渡し済み．
-            self.time_accumulator -= TIME_STEP_TU_PHYSICS
+        if self.fast_forward_rate >= 1000:
+            current_physics_dt_tu = TIME_STEP_TU_PHYSICS * 10**(int(np.log10(self.fast_forward_rate)) - 2)
+        else:
+            current_physics_dt_tu = TIME_STEP_TU_PHYSICS
 
-            self.simulation_time += timedelta(seconds=TIME_STEP_TU_PHYSICS * TU_TO_SEC) # ループの外でもほぼ問題ないが，厳密を期すならココ．
+        while self.time_accumulator >= current_physics_dt_tu:
+            self.engine.time_step = current_physics_dt_tu # エンジン内部の時間幅を動的に書き換える．
+
+            self._apply_control_forces(dt_tu=current_physics_dt_tu) # ユーザによる並進・回転入力の評価
+            self.engine.step()
+            self.time_accumulator -= current_physics_dt_tu
+
+            self.simulation_time += timedelta(seconds=current_physics_dt_tu * TU_TO_SEC) # ループの外でもほぼ問題ないが，厳密を期すならココ．
 
         # 軌道予測は重いため，1フレームに1回だけ実行する．
         self.orbital_predictions = self.engine.predict_trajectories(future_duration=30.0, dt_prediction=0.05)
@@ -206,10 +214,10 @@ class SpaceDebrisApp:
     def run(self):
         """メインループ"""
         while self.running:
+            dt_real_sec = self.clock.tick(FPS) / 1000.0 # FPSの上限を設定し，前回からの経過時間を返す．
             self.handle_events()
-            self.update()
+            self.update(dt_real_sec)
             self.render()
-            self.clock.tick(FPS)
             
         pygame.quit()
         sys.exit()
