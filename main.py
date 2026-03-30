@@ -155,7 +155,6 @@ class SpaceDebrisApp:
                                                                 current_angular_velocity=omega_si, dt_sec=dt_si)
             
             # 得られたトルク（N·m）をカノニカル単位系に変換して物理エンジンに渡す．
-            print(auto_torque_nm)
             auto_torque_cano = auto_torque_nm * NM_TO_CANONICAL
             self.player_torque = np.clip(auto_torque_cano, -self.max_torque_cano, self.max_torque_cano)
         else:
