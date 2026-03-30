@@ -2,6 +2,7 @@
 import pygame
 import numpy as np
 from typing import Dict
+from datetime import datetime
 
 from physics.body import RigidBody
 from view.camera import Camera
@@ -117,10 +118,12 @@ class GameRenderer:
         body_screen_pos = self.camera.world_to_screen(body.position)
         pygame.draw.rect(self.screen, (255, 255, 255), (body_screen_pos[0]-6, body_screen_pos[1]-6, 12, 12))
 
-    def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float, player_torque: float):
+    def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float,
+                player_torque: float, mission_start_time: datetime, simulation_time: datetime, fast_forward_rate: float):
         """各種UIを描画する"""
         self._draw_rel_nav_ui(player, target)
         self._draw_control_console(sas_enabled, throttle, player, player_torque)
+        self._draw_time(mission_start_time, simulation_time, fast_forward_rate)
 
     def _draw_rel_nav_ui(self, player: RigidBody, target: RigidBody):
         """相対ナビゲーションUI"""
@@ -328,3 +331,34 @@ class GameRenderer:
         # --- ラベル表示ココマデ ---
 
         return
+    
+    def _draw_time(self, mission_start_time: datetime, simulation_time: datetime, fast_forward_rate: float):
+        """時間に関する描画"""
+        # --- Mission Elapsed Timeココカラ ---
+
+        total_sec = int((simulation_time - mission_start_time).total_seconds())
+
+        sign = '+' if total_sec >= 0 else '-'
+        total_sec = abs(total_sec)
+
+        days = total_sec // 86400
+        temp = total_sec % 86400
+
+        hours = temp // 3600
+        temp %= 3600
+
+        minutes = temp // 60
+        seconds = temp % 60
+
+        met_str = f"MET{sign}{days:02}:{hours:02}:{minutes:02}:{seconds:02}"
+        met_surf = self.font.render(met_str, True, COLOR_UI_TEXT)
+        met_rect = met_surf.get_rect(center=(self.screen.get_size()[0] // 2, 20))
+        self.screen.blit(met_surf, met_rect.topleft)
+
+        # --- Mission Elapsed Timeココマデ ---
+
+        # 早送り倍率
+        ff_rate_str = f"({fast_forward_rate:.0f}×)"
+        ff_rate_surf = self.font.render(ff_rate_str, True, COLOR_UI_TEXT)
+        ff_rate_rect = ff_rate_surf.get_rect(midleft=(met_rect.centerx + (met_surf.get_size()[0] // 2) + 10, 20))
+        self.screen.blit(ff_rate_surf, ff_rate_rect.topleft)

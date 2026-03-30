@@ -2,16 +2,16 @@
 import pygame
 import sys
 import numpy as np
+from datetime import datetime, timedelta, timezone
 
 from physics.engine import GravityEngine
 from physics.body import RigidBody
 from physics.constants import (
-    KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL, TU_TO_SEC,
+    KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL, TU_TO_SEC, SEC_TO_TU,
     CLEANER_SAT_MASS_KG, CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2, CLEANER_SAT_SIZE_METER,
     MAX_THRUST_NEWTON, MAX_TORQUE_NM, NEWTON_TO_CANONICAL, NM_TO_CANONICAL
 )
 from physics.control import PIDController
-
 from view.camera import Camera, RelativeCamera
 from view.renderer import GameRenderer
 
@@ -20,7 +20,9 @@ SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
 PIXELS_PER_DU = 100.0
-TIME_STEP_TU = 0.001 # 1 / (806.80415 * FPS)
+
+TIME_STEP_TU_PHYSICS = (1 / FPS) * SEC_TO_TU # 物理エンジンの微小ステップ幅
+TIME_STEP_TU_PER_FRAME = (1 / FPS) * SEC_TO_TU # 1フレームあたりのステップ幅（等倍速では現実時間と同期）
 
 class SpaceDebrisApp:
     """
@@ -33,8 +35,15 @@ class SpaceDebrisApp:
         pygame.display.set_caption("Space Debris Cleaner")
         self.clock = pygame.time.Clock()
         self.running = True
+
         self.view_mode = "MACRO"
         self.throttle = 1.0 # スロットル100%
+
+        self.fast_forward_rate = 1.0 # 早送り倍率
+        self.time_accumulator = 0.0 # 未処理のシミュレーション時間を貯めるバケツ
+
+        self.simulation_time = datetime.now(timezone.utc) # ゲーム内の時刻（物理演算には関係しない．）
+        self.mission_start_time = self.simulation_time
 
         self._setup_physics()
         self._setup_view()
@@ -42,7 +51,7 @@ class SpaceDebrisApp:
 
     def _setup_physics(self):
         """物理エンジンと天体の初期配置"""
-        self.engine = GravityEngine(time_step=TIME_STEP_TU)
+        self.engine = GravityEngine(time_step=TIME_STEP_TU_PHYSICS)
         M_earth = KG_TO_MU * EARTH_MASS_KG
         self.earth = RigidBody(mass=M_earth, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), is_fixed=True)
         
@@ -122,14 +131,23 @@ class SpaceDebrisApp:
                     else:
                         self.view_mode = "MACRO"
                         self.renderer.camera = self.macro_camera
+                # 早送り係数の操作
+                elif event.key == pygame.K_PERIOD:
+                    self.fast_forward_rate = min(1000.0, self.fast_forward_rate * 10.0)
+                elif event.key == pygame.K_COMMA:
+                    self.fast_forward_rate = max(1.0, self.fast_forward_rate / 10.0)
         
         keys = pygame.key.get_pressed()
 
-        # スロットル
+        # スロットル（_apply_control_forcesの中に書くと爆速で上下してしまうためココに書く．）
         if keys[pygame.K_UP]:
             self.throttle = min(1.0, self.throttle + 0.01)
         if keys[pygame.K_DOWN]:
             self.throttle = max(0.01, self.throttle - 0.01)
+    
+    def _apply_control_forces(self, dt_tu: float):
+        """ユーザによる並進・回転およびSAS（安定増大装置）の計算"""
+        keys = pygame.key.get_pressed()
 
         # 並進スラスター
         thrust_mag = self.max_thrust_cano * self.throttle
@@ -148,7 +166,7 @@ class SpaceDebrisApp:
             target_angle = np.atan2(self.player_sat.velocity[1], self.player_sat.velocity[0])
             
             omega_si = self.player_sat.angular_velocity / TU_TO_SEC
-            dt_si = TIME_STEP_TU * TU_TO_SEC
+            dt_si = dt_tu * TU_TO_SEC
 
             # フライトコンピュータは馴染みのあるSI単位系で計算
             auto_torque_nm = self.sas_controller.compute_torque(current_angle=self.player_sat.angle, target_angle=target_angle,
@@ -164,17 +182,25 @@ class SpaceDebrisApp:
 
     def update(self):
         """状態の更新"""
-        self.engine.step()
-        self.orbital_predictions = self.engine.predict_trajectories(
-            future_duration=30.0, dt_prediction=0.05
-        )
+        self.time_accumulator += TIME_STEP_TU_PER_FRAME * self.fast_forward_rate
+
+        while self.time_accumulator >= TIME_STEP_TU_PHYSICS:
+            self._apply_control_forces(dt_tu=TIME_STEP_TU_PHYSICS) # ユーザによる並進・回転入力の評価
+            self.engine.step() # 初期化時のtime_stepでTIME_STEP_TU_PHYSICSを渡し済み．
+            self.time_accumulator -= TIME_STEP_TU_PHYSICS
+
+            self.simulation_time += timedelta(seconds=TIME_STEP_TU_PHYSICS * TU_TO_SEC) # ループの外でもほぼ問題ないが，厳密を期すならココ．
+
+        # 軌道予測は重いため，1フレームに1回だけ実行する．
+        self.orbital_predictions = self.engine.predict_trajectories(future_duration=30.0, dt_prediction=0.05)
 
     def render(self):
         """画面の描画"""
         self.renderer.clear()
         self.renderer.draw_predictions(self.orbital_predictions, player=self.player_sat)
         self.renderer.draw_bodies(self.earth, self.player_sat, self.target_debri)
-        self.renderer.draw_ui(self.player_sat, self.target_debri, self.sas_enabled, self.throttle, self.player_torque)
+        self.renderer.draw_ui(self.player_sat, self.target_debri, self.sas_enabled, self.throttle,
+                              self.player_torque, self.mission_start_time, self.simulation_time, self.fast_forward_rate)
         pygame.display.flip()
 
     def run(self):
