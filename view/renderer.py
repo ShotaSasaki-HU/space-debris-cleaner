@@ -305,7 +305,7 @@ class GameRenderer:
         # バーゲージ本体
         fill_h = int(h * normalized_input_val)
         gauge_surf = pygame.Surface((w, h), pygame.SRCALPHA)
-        pygame.draw.rect(gauge_surf, (100, 100, 100), (0, 0, w, h), 2) # 外枠
+        pygame.draw.rect(gauge_surf, (50, 50, 50), (0, 0, w, h)) # 外枠
         pygame.draw.rect(gauge_surf, color, (0, h - fill_h, w, fill_h)) # 塗りつぶし
         rotated_surf = pygame.transform.rotate(gauge_surf, np.degrees(angle))
         gauge_rect = rotated_surf.get_rect(center=(cx, cy)) # 座標を指定してRectを生成
