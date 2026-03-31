@@ -151,7 +151,7 @@ class GameRenderer:
     def _draw_control_console(self, sas_enabled: bool, throttle: float, player: RigidBody, player_torque: float):
         """操作に関するテキスト表示"""
         # UIの一番上に現在のカメラモードを描画
-        mode_text = "VIEW: " + ("MACRO (Absolute)" if isinstance(self.camera, Camera) else "MICRO/NANO (Relative)")
+        mode_text = "VIEW: " + ("EARTH" if isinstance(self.camera, Camera) else "TRACKING")
         self.screen.blit(self.font.render(mode_text, True, COLOR_UI_TEXT), (20, 20))
         
         sas_text = "SAS: ON" if sas_enabled else "SAS: OFF"
@@ -174,7 +174,7 @@ class GameRenderer:
         # プレイヤー画像の描画（常に上向き）
         if player.image_path and player.image_path in self.image_cache:
             image = self.image_cache[player.image_path]
-            # UI用に固定サイズ(約60x60)にスケーリング
+            # UI用に固定サイズにスケーリング
             orig_w, orig_h = image.get_size()
             scale_factor = 60.0 / max(orig_w, orig_h)
             hud_img = pygame.transform.smoothscale(image, (int(orig_w * scale_factor), int(orig_h * scale_factor)))

@@ -71,3 +71,9 @@ class RelativeCamera:
         screen_y = self.center_y - int(x_local * self.pixels_per_du)
 
         return (screen_x, screen_y)
+    
+    def set_pixels_per_du(self, pixels_per_du: float):
+        self.pixels_per_du = pixels_per_du
+    
+    def get_pixels_per_du(self): return self.pixels_per_du
+    def get_target_body(self): return self.target_body
