@@ -14,14 +14,15 @@ class CollisionEvent:
     body1: RigidBody
     body2: RigidBody
     impact_speed_cano: float # 衝突時の相対速度（カノニカル単位系）
-    is_destroyed: bool       # 破壊閾値を超えたかどうかのフラグ
+    body1_destroyed: bool    # 破壊されたかどうかのフラグ
+    body2_destroyed: bool
 
 class GravityEngine:
     """
     物理シミュレーションのルールを司るエンジンクラス．
     速度ベルレ法を用いて，管理下にある全剛体の状態（位置・速度・加速度）を更新する．
     """
-    def __init__(self, time_step: float, destruction_threshold_cano: float):
+    def __init__(self, time_step: float):
         """
         Args:
             time_step (float): 1ステップで進める時間 dt (TU)
@@ -30,7 +31,6 @@ class GravityEngine:
         self.bodies: List[RigidBody] = []
 
         self.restitution_coefficient = 0.6 # 反発係数
-        self.destruction_threshold_cano = destruction_threshold_cano # 破壊判定の閾値（例: 0.5 m/s を TU/DU に換算した値）
 
     def add_body(self, body: RigidBody) -> None:
         """シミュレーション空間に剛体を追加"""
@@ -101,11 +101,25 @@ class GravityEngine:
 
                     # --- 速度ベクトルの更新ココマデ ---
 
-                    # 破壊イベントの発行
-                    impact_speed = abs(v_rel_n)
-                    is_destroyed = impact_speed > self.destruction_threshold_cano
+                    # --- 破壊判定ココカラ ---
+                    # 参考：https://physics-school.com/two-body-energy/
 
-                    events.append(CollisionEvent(b1, b2, impact_speed, is_destroyed))
+                    reduced_mass = (b1.mass * b2.mass) / (b1.mass + b2.mass) # 換算質量
+                    impact_speed = abs(v_rel_n) # 衝突前の相対速度の大きさ
+
+                    # 相対運動エネルギーの減少量（完全弾性衝突ならe=1より，dE=0となる．）
+                    delta_energy = 0.5 * reduced_mass * (1 - (self.restitution_coefficient ** 2)) * (impact_speed ** 2)
+
+                    # 個別に破壊判定
+                    b1_destroyed = delta_energy > b1.crash_tolerance_joules
+                    b2_destroyed = delta_energy > b2.crash_tolerance_joules
+                    print(f"dE: {delta_energy}")
+                    print(f"b1.crash_tolerance_joules: {b1.crash_tolerance_joules}")
+                    print(f"b2.crash_tolerance_joules: {b2.crash_tolerance_joules}")
+
+                    # --- 破壊判定ココマデ ---
+
+                    events.append(CollisionEvent(b1, b2, impact_speed, b1_destroyed, b2_destroyed))
 
         return events
 

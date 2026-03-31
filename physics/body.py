@@ -55,6 +55,7 @@ class RigidBody:
         self.draw_fixed_size_px = draw_fixed_size_px
 
         self.collision_radius: float = min(real_width_du, real_height_du) / 2.0 # 衝突半径
+        self.crash_tolerance_cano: float = mass / 1e7 # 構造強度（自身の質量の1/N倍のエネルギーまで耐えられると仮定．SI単位系ならジュール．）
 
     def apply_local_force(self, force_local_x: float, force_local_y: float) -> None:
         """

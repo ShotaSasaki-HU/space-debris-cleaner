@@ -49,7 +49,7 @@ class SpaceDebrisApp:
 
     def _setup_physics(self):
         """物理エンジンと天体の初期配置"""
-        self.engine = GravityEngine(time_step=TIME_STEP_TU_PHYSICS,destruction_threshold_cano=0.5 * METER_TO_DU / SEC_TO_TU)
+        self.engine = GravityEngine(time_step=TIME_STEP_TU_PHYSICS)
 
         # 地球
         M_earth = KG_TO_MU * EARTH_MASS_KG
@@ -255,16 +255,16 @@ class SpaceDebrisApp:
 
             events = self.engine.step()
             for event in events:
-                if event.is_destroyed:
-                    print(f"CRITICAL HIT! Relative Speed: {event.impact_speed_cano * (SEC_TO_TU / METER_TO_DU)}")
+                print(f"Collision: {event.impact_speed_cano * (SEC_TO_TU / METER_TO_DU)}")
 
-                    # 質量が小さい方を破壊
-                    if event.body1.mass < event.body2.mass:
-                        self.engine.remove_body(event.body1)
-                    else:
-                        self.engine.remove_body(event.body2)
-                else:
-                    print(f"BONK! Light collision: {event.impact_speed_cano * (SEC_TO_TU / METER_TO_DU)}")
+                if event.body1_destroyed:
+                    print("BODY 1 HAS BEEN DESTROYED!")
+                    self.engine.remove_body(event.body1)
+                if event.body2_destroyed:
+                    print("BODY 2 HAS BEEN DESTROYED!")
+                    self.engine.remove_body(event.body2)
+
+                print()
 
             self.time_accumulator -= current_physics_dt_tu
             self.simulation_time += timedelta(seconds=current_physics_dt_tu * TU_TO_SEC) # ループの外でもほぼ問題ないが，厳密を期すならココ．
