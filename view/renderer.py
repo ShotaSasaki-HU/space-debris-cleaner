@@ -250,7 +250,7 @@ class GameRenderer:
             screen=self.screen,
             cx=cx,
             cy=cy,
-            radius=2.8* offset,
+            radius=2.8 * offset,
             thickness=10,
             min_val=0.0,
             max_val=MAX_TORQUE_NM,
