@@ -23,9 +23,8 @@ class GameRenderer:
         self.camera = camera
         self.image_cache: Dict[str, pygame.Surface] = {}
         self.font = pygame.font.SysFont("couriernew", 20)
-        
-        # 予測線描画用の透明サーフェス
         self.prediction_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        self.scaled_cache: Dict[str, tuple[int, int, pygame.Surface]] = {}
 
     def clear(self, bg_color: tuple = (10, 10, 20)):
         """画面をクリアする"""
@@ -48,30 +47,8 @@ class GameRenderer:
     def draw_bodies(self, bodies: list[RigidBody], selected_body: RigidBody):
         """宇宙の天体・オブジェクトを描画する"""
         for body in bodies:
-            if body.is_fixed:
-                earth_pos = self.camera.world_to_screen(body.position)
-                earth_r = self.camera.pixels_per_du
-                
-                screen_w, screen_h = self.screen.get_size()
-                
-                # 地球のバウンディングボックス（外接矩形）が画面の範囲内にあるか判定
-                is_on_screen = not (
-                    earth_pos[0] + earth_r < 0 or 
-                    earth_pos[0] - earth_r > screen_w or
-                    earth_pos[1] + earth_r < 0 or 
-                    earth_pos[1] - earth_r > screen_h
-                )
-                
-                if is_on_screen:
-                    # Pygameのdraw.circleは巨大すぎる半径を与えるとフリーズするため，安全な上限を設ける．
-                    if earth_r < 30000:
-                        self._draw_realistic_body(body=body, is_selecetd=False)
-                    else:
-                        # 描画限界を超えるズームで地球に肉薄している（または中にいる）場合，パフォーマンス保護のため画面全体を地球色で塗りつぶす．
-                        self.screen.fill(COLOR_EARTH)
-            else:
-                is_selected = (body is selected_body)
-                self._draw_realistic_body(body=body, is_selecetd=is_selected)
+            is_selected = (body is selected_body)
+            self._draw_realistic_body(body=body, is_selecetd=is_selected)
 
     def _draw_realistic_body(self, body: RigidBody, is_selecetd: bool = False):
         """画像をロードし，視点に合わせてスケーリング・回転して描画する．"""
@@ -86,7 +63,7 @@ class GameRenderer:
 
             image: pygame.Surface = self.image_cache.get(body.image_path)
             if image:
-                # スケーリングロジックの決定
+                # スケーリングロジック
                 # まずは，原寸大でスケーリングしてみる．
                 target_w = int(body.real_width_du * self.camera.pixels_per_du)
                 target_h = int(body.real_height_du * self.camera.pixels_per_du)
@@ -101,8 +78,52 @@ class GameRenderer:
                     else:
                         target_h = target_size_px
                         target_w = int(orig_w * target_size_px / orig_h)
+                
+                # 厳密性に欠けるが，大きすぎる画像はクラッシュを起こすため放棄する．
+                if target_w > 5000 or target_h > 5000: return
+                
+                # --- カリングココカラ ---
 
-                scaled_image = pygame.transform.smoothscale(image, (target_w, target_h))
+                body_pos_px = self.camera.world_to_screen(body.position)
+                
+                # 画像のだいたいの半径
+                approx_radius = max(target_w, target_h) * 0.75
+                screen_w, screen_h = self.screen.get_size()
+                
+                # 画面内に入っているか判定
+                is_on_screen = not (
+                    body_pos_px[0] + approx_radius < 0 or 
+                    body_pos_px[0] - approx_radius > screen_w or
+                    body_pos_px[1] + approx_radius < 0 or 
+                    body_pos_px[1] - approx_radius > screen_h
+                )
+
+                if not is_on_screen: return
+
+                # --- カリングココマデ ---
+
+                # --- スケーリングのキャッシュココカラ ---
+
+                cache_key = body.image_path
+                needs_scaling = True
+
+                # 前回と同じサイズならキャッシュを利用する．pygameのscale演算が重いため．
+                if cache_key in self.scaled_cache:
+                    cached_w, cached_h, cached_surf = self.scaled_cache[cache_key]
+                    if cached_w == target_w and cached_h == target_h:
+                        scaled_image = cached_surf
+                        needs_scaling = False
+
+                if needs_scaling:
+                    # 大きな画像では，重いsmoothscaleの使用を避ける．
+                    if target_w > 2000 or target_h > 2000:
+                        scaled_image = pygame.transform.scale(image, (target_w, target_h))
+                    else:
+                        scaled_image = pygame.transform.smoothscale(image, (target_w, target_h))
+
+                    self.scaled_cache[cache_key] = (target_w, target_h, scaled_image) # キャッシュを保存
+
+                # --- スケーリングのキャッシュココマデ ---
 
                 # Cameraの場合
                 if isinstance(self.camera, Camera):
