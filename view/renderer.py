@@ -220,7 +220,7 @@ class GameRenderer:
         ## --- トルク表示ココカラ ---
 
         bar_w = 10
-        bar_h = offset
+        bar_h = 2 * offset
 
         torque_nm = player_torque / NM_TO_CANONICAL
         val_ccw = max(0.0, torque_nm)
@@ -238,7 +238,7 @@ class GameRenderer:
             max_val=MAX_TORQUE_NM,
             input_val=val_ccw,
             full_color=(0, 255, 0),
-            stack_labels=[f'{val_ccw:.3f} N·m']
+            stack_labels=[]
         )
         # 負のトルク（CW）
         self._draw_bar_gauge(
@@ -252,8 +252,18 @@ class GameRenderer:
             max_val=MAX_TORQUE_NM,
             input_val=val_cw,
             full_color=(0, 255, 0),
-            stack_labels=[f'{-val_cw:.3f} N·m']
+            stack_labels=[]
         )
+
+        torque_text = f'TRQ'
+        torque_surf = self.font.render(torque_text, True, COLOR_UI_TEXT)
+        torque_rect = torque_surf.get_rect(center=(cx, cy - offset - 142))
+        self.screen.blit(torque_surf, torque_rect.topleft)
+
+        torque_text = f'{torque_nm:.3f} N·m'
+        torque_surf = self.font.render(torque_text, True, COLOR_UI_TEXT)
+        torque_rect = torque_surf.get_rect(center=(cx, cy - offset - 120))
+        self.screen.blit(torque_surf, torque_rect.topleft)
 
         ## --- トルク表示ココマデ ---
 
@@ -297,7 +307,7 @@ class GameRenderer:
         if not stack_labels: return # ラベルが無ければ終了
 
         line_h = self.font.get_linesize() # フォント高さ
-        spacing = int(line_h * 0.2) # 余白
+        spacing = 2
 
         label_surfs = [self.font.render(label, True, COLOR_UI_TEXT) for label in stack_labels] # 各ラベルに対するサーフェス
 
