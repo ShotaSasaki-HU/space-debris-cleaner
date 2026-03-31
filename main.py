@@ -133,7 +133,7 @@ class SpaceDebrisApp:
                 if event.button == 1: # 左クリック
                     mouse_x, mouse_y = event.pos
 
-                    for body in self.engine.bodies:
+                    for body in reversed(self.engine.bodies): # 後から描画された方を優先
                         if body.is_fixed: continue
 
                         screen_x, screen_y = self.renderer.camera.world_to_screen(body.position) # オブジェクトの画面上のピクセル座標
