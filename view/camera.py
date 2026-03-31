@@ -32,6 +32,10 @@ class Camera:
         screen_y = self.center_y - int(world_pos[1] * self.pixels_per_du) # Y座標 = 画面中央 - (物理Y * スケール)
         
         return (screen_x, screen_y)
+    
+    def set_pixels_per_du(self, pixels_per_du: float) -> None: self.pixels_per_du = pixels_per_du
+
+    def get_pixels_per_du(self) -> float: return self.pixels_per_du
 
 class RelativeCamera:
     """

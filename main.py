@@ -170,7 +170,13 @@ class SpaceDebrisApp:
                 elif event.key == pygame.K_COMMA:
                     self.fast_forward_rate = max(1.0, self.fast_forward_rate / 10.0)
                 
-                if type(self.renderer.camera) is RelativeCamera:
+                if type(self.renderer.camera) is Camera:
+                    if event.key == pygame.K_RIGHT:
+                        max_pixels_per_du = min(SCREEN_WIDTH, SCREEN_HEIGHT) / (1.2 * 2.0) # 地球の直径 = 2DU
+                        self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
+                    elif event.key == pygame.K_LEFT:
+                        self.renderer.camera.set_pixels_per_du(max(30, self.renderer.camera.get_pixels_per_du() // 2))
+                elif type(self.renderer.camera) is RelativeCamera:
                     if event.key == pygame.K_RIGHT:
                         target_body = self.renderer.camera.get_target_body()
                         required_du = 1.2 * np.linalg.norm([target_body.real_width_du, target_body.real_height_du])
