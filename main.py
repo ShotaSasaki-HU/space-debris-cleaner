@@ -53,7 +53,16 @@ class SpaceDebrisApp:
 
         # 地球
         M_earth = KG_TO_MU * EARTH_MASS_KG
-        self.earth = RigidBody(mass=M_earth, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), is_fixed=True)
+        self.earth = RigidBody(
+            mass=M_earth,
+            position=np.array([0.0, 0.0]),
+            velocity=np.array([0.0, 0.0]),
+            is_fixed=True,
+            image_path="assets/images/earth.png",
+            real_width_du=2,
+            real_height_du=2,
+            draw_fixed_size_px=30
+        )
         self.engine.add_body(self.earth)
         
         # プレイヤー

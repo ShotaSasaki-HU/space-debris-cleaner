@@ -65,13 +65,13 @@ class GameRenderer:
                 if is_on_screen:
                     # Pygameのdraw.circleは巨大すぎる半径を与えるとフリーズするため，安全な上限を設ける．
                     if earth_r < 30000:
-                        pygame.draw.circle(self.screen, COLOR_EARTH, earth_pos, earth_r)
+                        self._draw_realistic_body(body=body, is_selecetd=False)
                     else:
                         # 描画限界を超えるズームで地球に肉薄している（または中にいる）場合，パフォーマンス保護のため画面全体を地球色で塗りつぶす．
                         self.screen.fill(COLOR_EARTH)
             else:
                 is_selected = (body is selected_body)
-                self._draw_realistic_body(body, is_selected)
+                self._draw_realistic_body(body=body, is_selecetd=is_selected)
 
     def _draw_realistic_body(self, body: RigidBody, is_selecetd: bool = False):
         """画像をロードし，視点に合わせてスケーリング・回転して描画する．"""
@@ -87,9 +87,12 @@ class GameRenderer:
             image: pygame.Surface = self.image_cache.get(body.image_path)
             if image:
                 # スケーリングロジックの決定
-                # マクロ視点（Camera）の場合
-                if body.draw_fixed_size_px and isinstance(self.camera, Camera):
-                    # 画像のアスペクト比を維持してスケーリング
+                # まずは，原寸大でスケーリングしてみる．
+                target_w = int(body.real_width_du * self.camera.pixels_per_du)
+                target_h = int(body.real_height_du * self.camera.pixels_per_du)
+
+                # 原寸大が小さすぎたら，固定サイズに変更する．
+                if min(target_w, target_h) < body.draw_fixed_size_px:
                     orig_w, orig_h = image.get_size()
                     target_size_px = body.draw_fixed_size_px
                     if orig_w > orig_h:
@@ -99,28 +102,13 @@ class GameRenderer:
                         target_h = target_size_px
                         target_w = int(orig_w * target_size_px / orig_h)
 
-                    scaled_image = pygame.transform.smoothscale(image, (target_w, target_h))
+                scaled_image = pygame.transform.smoothscale(image, (target_w, target_h))
+
+                # Cameraの場合
+                if isinstance(self.camera, Camera):
                     rotated_image = pygame.transform.rotate(scaled_image, np.rad2deg(body.angle))
-
-                # 拡大視点（RelativeCamera）の場合
+                # RelativeCameraの場合
                 else:
-                    # まずは，原寸大でスケーリングしてみる．
-                    target_w = int(body.real_width_du * self.camera.pixels_per_du)
-                    target_h = int(body.real_height_du * self.camera.pixels_per_du)
-
-                    # 原寸大が小さすぎたら，固定サイズに変更する．
-                    if min(target_w, target_h) < body.draw_fixed_size_px:
-                        orig_w, orig_h = image.get_size()
-                        target_size_px = body.draw_fixed_size_px
-                        if orig_w > orig_h:
-                            target_w = target_size_px
-                            target_h = int(orig_h * target_size_px / orig_w)
-                        else:
-                            target_h = target_size_px
-                            target_w = int(orig_w * target_size_px / orig_h)
-
-                    scaled_image = pygame.transform.smoothscale(image, (target_w, target_h))
-
                     # ターゲットの「地球に対する角度（位相）」を計算
                     theta = np.atan2(self.camera.target_body.position[1], self.camera.target_body.position[0])
                     rotated_image = pygame.transform.rotate(scaled_image, np.rad2deg((np.pi / 2) - theta + body.angle))
