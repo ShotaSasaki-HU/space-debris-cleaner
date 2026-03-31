@@ -2,15 +2,26 @@
 import numpy as np
 from typing import List, Dict
 import copy
+from dataclasses import dataclass
 
 from physics.body import RigidBody
+
+@dataclass
+class CollisionEvent:
+    """
+    衝突の結果をメインループ（コントローラー層）に伝達するためのデータ（DTO）クラス．
+    """
+    body1: RigidBody
+    body2: RigidBody
+    impact_speed_cano: float # 衝突時の相対速度（カノニカル単位系）
+    is_destroyed: bool       # 破壊閾値を超えたかどうかのフラグ
 
 class GravityEngine:
     """
     物理シミュレーションのルールを司るエンジンクラス．
     速度ベルレ法を用いて，管理下にある全剛体の状態（位置・速度・加速度）を更新する．
     """
-    def __init__(self, time_step: float):
+    def __init__(self, time_step: float, destruction_threshold_cano: float):
         """
         Args:
             time_step (float): 1ステップで進める時間 dt (TU)
@@ -18,9 +29,85 @@ class GravityEngine:
         self.time_step: float = time_step
         self.bodies: List[RigidBody] = []
 
+        self.restitution_coefficient = 0.6 # 反発係数
+        self.destruction_threshold_cano = destruction_threshold_cano # 破壊判定の閾値（例: 0.5 m/s を TU/DU に換算した値）
+
     def add_body(self, body: RigidBody) -> None:
         """シミュレーション空間に剛体を追加"""
         self.bodies.append(body)
+    
+    def remove_body(self, body: RigidBody) -> None:
+        """シミュレーション空間から剛体を削除"""
+        self.bodies.remove(body)
+    
+    def _resolve_collisions(self, target_bodies: List[RigidBody]) -> List[CollisionEvent]:
+        """
+        剛体同士の重なりを検知し，位置補正と速度ベクトルの弾性衝突演算を行う．
+        """
+        events = []
+        n = len(target_bodies)
+
+        # 総当たり判定
+        for i in range(n):
+            for j in range(i + 1, n):
+                b1 = target_bodies[i]
+                b2 = target_bodies[j]
+
+                r1 = b1.get_collision_radius()
+                r2 = b2.get_collision_radius()
+                if r1 == 0 and r2 == 0: continue
+
+                r_vec = b2.position - b1.position
+                dist = np.linalg.norm(r_vec)
+                min_dist = r1 + r2
+
+                if dist < min_dist:
+                    n_vec = r_vec / dist if dist != 0 else np.array([1.0, 0.0]) # 単位法線ベクトル
+
+                    # --- 重なり解消の位置補正ココカラ ---
+
+                    overlap = min_dist - dist
+                    total_mass = b1.mass + b2.mass
+
+                    if not b1.is_fixed and not b2.is_fixed:
+                        b1.position -= n_vec * (overlap * (b2.mass / total_mass))
+                        b2.position += n_vec * (overlap * (b1.mass / total_mass))
+                    elif b1.is_fixed and not b2.is_fixed:
+                        b2.position += n_vec * overlap
+                    elif not b1.is_fixed and b2.is_fixed:
+                        b1.position -= n_vec * overlap
+                    else:
+                        continue
+
+                    # --- 重なり解消の位置補正ココマデ ---
+
+                    # --- 速度ベクトルの更新ココカラ ---
+
+                    v_rel = b2.velocity - b1.velocity
+                    v_rel_n = np.dot(v_rel, n_vec) # 法線方向の相対速度（正射影の大きさ）
+
+                    # 既に離れようとしている場合は速度を変えない．
+                    if v_rel_n > 0: continue
+
+                    inv_m1 = 1.0 / b1.mass if not b1.is_fixed else 0.0
+                    inv_m2 = 1.0 / b2.mass if not b2.is_fixed else 0.0
+                    j = -(1.0 + self.restitution_coefficient) * v_rel_n / (inv_m1 + inv_m2)
+
+                    # 速度ベクトルの更新（v1'とv2'を反発係数の式に代入してみると確認できるよ．）
+                    if not b1.is_fixed:
+                        b1.velocity -= (j * inv_m1) * n_vec
+                    if not b2.is_fixed:
+                        b2.velocity += (j * inv_m2) * n_vec
+
+                    # --- 速度ベクトルの更新ココマデ ---
+
+                    # 破壊イベントの発行
+                    impact_speed = abs(v_rel_n)
+                    is_destroyed = impact_speed > self.destruction_threshold_cano
+
+                    events.append(CollisionEvent(b1, b2, impact_speed, is_destroyed))
+
+        return events
 
     def _compute_accelerations_for(self, target_bodies: List[RigidBody]) -> None:
         """
@@ -50,9 +137,9 @@ class GravityEngine:
                 unit_r_vec = r_vec / np.sqrt(distance_sq) # 単位位置ベクトル
                 target_bodies[i].acceleration += acc_mag * unit_r_vec
 
-    def _step_bodies(self, target_bodies: List[RigidBody], dt: float) -> None:
+    def _step_bodies(self, target_bodies: List[RigidBody], dt: float, includes_collision: bool) -> List[CollisionEvent]:
         """
-        指定された剛体リストと時間刻み幅で，並進と回転の速度ベルレ法を実行する．
+        指定された剛体リストと時間刻み幅で，並進と回転の速度ベルレ法を実行し，衝突も解決する．
         """
         # Step 1: 位置更新
         for body in target_bodies:
@@ -74,6 +161,11 @@ class GravityEngine:
                 body.angular_velocity += 0.5 * (old_angle_accs[i] + body.angular_acceleration) * dt
             
             body.clear_applied_forces() # スラスター入力のリセット
+        
+        # Step 5: 衝突の解決（速度更新後に行うことで運動量が保存される？）
+        collision_events = self._resolve_collisions(target_bodies) if includes_collision else []
+
+        return collision_events
 
     def initialize(self) -> None:
         """
@@ -82,8 +174,9 @@ class GravityEngine:
         """
         self._compute_accelerations_for(self.bodies)
 
-    def step(self) -> None:
-        self._step_bodies(self.bodies, self.time_step)
+    def step(self) -> List[CollisionEvent]:
+        """1ステップ計算を進め，発生した衝突イベントのリストを返す．"""
+        return self._step_bodies(self.bodies, self.time_step, includes_collision=True)
     
     def predict_trajectories(self, future_duration: float, dt_prediction: float) -> Dict[int, List[np.ndarray]]:
         """
@@ -109,7 +202,7 @@ class GravityEngine:
 
         # 仮想宇宙でのシミュレーションループ
         for _ in range(steps):
-            self._step_bodies(temp_bodies, dt_prediction)
+            self._step_bodies(temp_bodies, dt_prediction, includes_collision=False)
 
             for orig_body, temp_body in zip(self.bodies, temp_bodies): # 2つのリストの順番が完全に一致している前提
                 if not orig_body.is_fixed:
@@ -117,3 +210,5 @@ class GravityEngine:
                     predictions[id(orig_body)].append(temp_body.position.copy())
   
         return predictions
+    
+    def set_time_step(self, time_step: float) -> None: self.time_step = time_step

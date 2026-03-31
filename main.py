@@ -49,7 +49,7 @@ class SpaceDebrisApp:
 
     def _setup_physics(self):
         """物理エンジンと天体の初期配置"""
-        self.engine = GravityEngine(time_step=TIME_STEP_TU_PHYSICS)
+        self.engine = GravityEngine(time_step=TIME_STEP_TU_PHYSICS,destruction_threshold_cano=0.5 * METER_TO_DU / SEC_TO_TU)
 
         # 地球
         M_earth = KG_TO_MU * EARTH_MASS_KG
@@ -250,12 +250,23 @@ class SpaceDebrisApp:
             current_physics_dt_tu = TIME_STEP_TU_PHYSICS
 
         while self.time_accumulator >= current_physics_dt_tu:
-            self.engine.time_step = current_physics_dt_tu # エンジン内部の時間幅を動的に書き換える．
-
+            self.engine.set_time_step(current_physics_dt_tu) # エンジン内部の時間幅を動的に書き換える．
             self._apply_control_forces(dt_tu=current_physics_dt_tu) # ユーザによる並進・回転入力の評価
-            self.engine.step()
-            self.time_accumulator -= current_physics_dt_tu
 
+            events = self.engine.step()
+            for event in events:
+                if event.is_destroyed:
+                    print(f"CRITICAL HIT! Relative Speed: {event.impact_speed_cano * (SEC_TO_TU / METER_TO_DU)}")
+
+                    # 質量が小さい方を破壊
+                    if event.body1.mass < event.body2.mass:
+                        self.engine.remove_body(event.body1)
+                    else:
+                        self.engine.remove_body(event.body2)
+                else:
+                    print(f"BONK! Light collision: {event.impact_speed_cano * (SEC_TO_TU / METER_TO_DU)}")
+
+            self.time_accumulator -= current_physics_dt_tu
             self.simulation_time += timedelta(seconds=current_physics_dt_tu * TU_TO_SEC) # ループの外でもほぼ問題ないが，厳密を期すならココ．
 
         # 軌道予測は重いため，1フレームに1回だけ実行する．

@@ -54,6 +54,8 @@ class RigidBody:
         self.real_height_du = real_height_du
         self.draw_fixed_size_px = draw_fixed_size_px
 
+        self.collision_radius: float = min(real_width_du, real_height_du) / 2.0 # 衝突半径
+
     def apply_local_force(self, force_local_x: float, force_local_y: float) -> None:
         """
         機体のローカル座標系で推力を加える．（W/S, A/Dキー用）
@@ -86,3 +88,5 @@ class RigidBody:
         """
         self.applied_force.fill(0.0)
         self.applied_torque = 0.0
+    
+    def get_collision_radius(self) -> float: return self.collision_radius
