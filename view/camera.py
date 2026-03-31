@@ -44,10 +44,6 @@ class RelativeCamera:
         self.pixels_per_du = pixels_per_du 
         self.target_body: RigidBody = None
 
-    def set_target(self, target: RigidBody) -> None:
-        """カメラが追従・注視するターゲットをセットする"""
-        self.target_body = target
-
     def world_to_screen(self, world_pos: np.ndarray) -> Tuple[int, int]:
         if self.target_body is None:
             return (self.center_x, self.center_y)
@@ -72,8 +68,8 @@ class RelativeCamera:
 
         return (screen_x, screen_y)
     
-    def set_pixels_per_du(self, pixels_per_du: float):
-        self.pixels_per_du = pixels_per_du
+    def set_pixels_per_du(self, pixels_per_du: float) -> None: self.pixels_per_du = pixels_per_du
+    def set_target_body(self, target_body: RigidBody) -> None: self.target_body = target_body
     
-    def get_pixels_per_du(self): return self.pixels_per_du
-    def get_target_body(self): return self.target_body
+    def get_pixels_per_du(self) -> float: return self.pixels_per_du
+    def get_target_body(self) -> RigidBody: return self.target_body

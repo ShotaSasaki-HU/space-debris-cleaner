@@ -19,7 +19,7 @@ from view.renderer import GameRenderer
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
-PIXELS_PER_DU = 100.0
+PIXELS_PER_DU = 200.0
 TIME_STEP_TU_PHYSICS = (1 / FPS) * SEC_TO_TU # 物理エンジンの微小ステップ幅
 
 class SpaceDebrisApp:
@@ -50,10 +50,14 @@ class SpaceDebrisApp:
     def _setup_physics(self):
         """物理エンジンと天体の初期配置"""
         self.engine = GravityEngine(time_step=TIME_STEP_TU_PHYSICS)
+
+        # 地球
         M_earth = KG_TO_MU * EARTH_MASS_KG
         self.earth = RigidBody(mass=M_earth, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), is_fixed=True)
+        self.engine.add_body(self.earth)
         
-        r_player = METER_TO_DU * (EARTH_RADIUS_M + 410e3)
+        # プレイヤー
+        r_player = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
         v_player = np.sqrt(G_CANONICAL * M_earth / r_player)
         m_sat_cano = CLEANER_SAT_MASS_KG * KG_TO_MU
         i_sat_cano = CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2 * KG_TO_MU * (METER_TO_DU ** 2)
@@ -68,26 +72,35 @@ class SpaceDebrisApp:
             real_height_du=CLEANER_SAT_SIZE_METER[1] * METER_TO_DU,
             draw_fixed_size_px=30
         )
+        self.engine.add_body(self.player_sat)
 
-        r_2nd_stage = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
-        v_2nd_stage = np.sqrt(G_CANONICAL * M_earth / r_2nd_stage)
+        # 複数のデブリ
+        r_base = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
         m_2nd_stage_cano = 3000 * KG_TO_MU # H-IIAロケット15号機の上段
         i_2nd_stage_cano = 33250 * KG_TO_MU * (METER_TO_DU ** 2) # 円柱の中心軸に垂直な軸まわりの慣性モーメント
-        self.target_debri = RigidBody(
-            mass=m_2nd_stage_cano,
-            position=np.array([r_2nd_stage, 0.0]),
-            velocity=np.array([0.0, v_2nd_stage]),
-            moment_of_inertia=i_2nd_stage_cano,
-            angle=0.0,
-            image_path="assets/images/rocket_2nd_stage.png",
-            real_width_du=11.0 * METER_TO_DU,
-            real_height_du=4.0 * METER_TO_DU,
-            draw_fixed_size_px=30
-        )
+        for i in range(3):
+            # デブリごとに位相を30度ずつ，高度を5kmずつずらす．
+            angle_offset = i * (np.pi / 6.0)
+            r_debri = r_base + (i * 5000 * METER_TO_DU)
+            v_debri = np.sqrt(G_CANONICAL * M_earth / r_debri)
 
-        self.engine.add_body(self.earth)
-        self.engine.add_body(self.player_sat)
-        self.engine.add_body(self.target_debri)
+            pos = np.array([r_debri * np.cos(angle_offset), r_debri * np.sin(angle_offset)])
+            vel = np.array([-v_debri * np.sin(angle_offset), v_debri * np.cos(angle_offset)]) # 速度は位置ベクトルと直交する方向
+
+            debri = RigidBody(
+                mass=m_2nd_stage_cano,
+                position=pos,
+                velocity=vel,
+                moment_of_inertia=i_2nd_stage_cano,
+                angle=0.0,
+                image_path="assets/images/rocket_2nd_stage.png",
+                real_width_du=11.0 * METER_TO_DU,
+                real_height_du=4.0 * METER_TO_DU,
+                draw_fixed_size_px=30
+            )
+            self.engine.add_body(debri)
+        self.selected_body = self.engine.bodies[-1] # 初期ターゲットの設定
+
         self.engine.initialize()
 
         self.max_thrust_cano = MAX_THRUST_NEWTON * NEWTON_TO_CANONICAL
@@ -98,7 +111,7 @@ class SpaceDebrisApp:
         self.earth_camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU)
 
         self.tracking_camera = RelativeCamera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU)
-        self.tracking_camera.set_target(self.target_debri)
+        self.tracking_camera.set_target_body(self.selected_body)
 
         self.view_mode = "EARTH"
         self.renderer = GameRenderer(self.screen, self.earth_camera)
@@ -113,6 +126,33 @@ class SpaceDebrisApp:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+            
+            # --- マウスクリックによるターゲット選択ココカラ ---
+
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1: # 左クリック
+                    mouse_x, mouse_y = event.pos
+
+                    for body in self.engine.bodies:
+                        if body.is_fixed: continue
+
+                        screen_x, screen_y = self.renderer.camera.world_to_screen(body.position) # オブジェクトの画面上のピクセル座標
+                        dist = np.hypot(screen_x - mouse_x, screen_y - mouse_y)
+
+                        target_w_px = int(body.real_width_du * self.renderer.camera.pixels_per_du)
+                        target_h_px = int(body.real_height_du * self.renderer.camera.pixels_per_du)
+                        if min(target_w_px, target_h_px) < body.draw_fixed_size_px:
+                            target_r_px = body.draw_fixed_size_px // 2
+                        else:
+                            target_r_px = max(target_w_px, target_h_px) // 2
+
+                        if dist < target_r_px:
+                            self.selected_body = body
+                            self.tracking_camera.set_target_body(body)
+                            break # 先に見つかったbodyが優先
+
+            # --- マウスクリックによるターゲット選択ココマデ ---
+
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:
                     self.sas_enabled = not self.sas_enabled
@@ -210,8 +250,8 @@ class SpaceDebrisApp:
         """画面の描画"""
         self.renderer.clear()
         self.renderer.draw_predictions(self.orbital_predictions, player=self.player_sat)
-        self.renderer.draw_bodies(self.earth, self.player_sat, self.target_debri)
-        self.renderer.draw_ui(self.player_sat, self.target_debri, self.sas_enabled, self.throttle,
+        self.renderer.draw_bodies(bodies=self.engine.bodies, selected_body=self.selected_body)
+        self.renderer.draw_ui(self.player_sat, self.selected_body, self.sas_enabled, self.throttle,
                               self.player_torque, self.mission_start_time, self.simulation_time, self.fast_forward_rate)
         pygame.display.flip()
 

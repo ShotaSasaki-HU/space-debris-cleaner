@@ -45,16 +45,17 @@ class GameRenderer:
             
         self.screen.blit(self.prediction_surface, (0, 0))
 
-    def draw_bodies(self, earth: RigidBody, player: RigidBody, debri: RigidBody):
+    def draw_bodies(self, bodies: list[RigidBody], selected_body: RigidBody):
         """宇宙の天体・オブジェクトを描画する"""
-        # 地球
-        earth_pos = self.camera.world_to_screen(earth.position)
-        pygame.draw.circle(self.screen, COLOR_EARTH, earth_pos, int(1.0 * self.camera.pixels_per_du))
+        for body in bodies:
+            if body.is_fixed:
+                fixed_pos = self.camera.world_to_screen(body.position)
+                pygame.draw.circle(self.screen, COLOR_EARTH, fixed_pos, int(1.0 * self.camera.pixels_per_du))
+            else:
+                is_selected = (body is selected_body)
+                self._draw_realistic_body(body, is_selected)
 
-        self._draw_realistic_body(player)
-        self._draw_realistic_body(debri)
-
-    def _draw_realistic_body(self, body: RigidBody):
+    def _draw_realistic_body(self, body: RigidBody, is_selecetd: bool = False):
         """画像をロードし，視点に合わせてスケーリング・回転して描画する．"""
         if body.image_path:
             if body.image_path not in self.image_cache:
@@ -111,6 +112,19 @@ class GameRenderer:
                 draw_pos = (screen_pos[0] - rotated_rect.width // 2,
                             screen_pos[1] - rotated_rect.height // 2) # 画像の中心座標を取得
                 
+                # 選択されているbodyの縁取り
+                if is_selecetd:
+                    opaque_mask = pygame.mask.from_surface(rotated_image) # 画像の非透過部分からマスクを生成
+                    outline = opaque_mask.outline() # マスクの輪郭座標リスト
+                    if len(outline) >= 2:
+                        # 輪郭座標は画像の左上が原点なので，画面描画座標 (draw_pos) にオフセットを加算する．
+                        outline_points = [(p[0] + draw_pos[0], p[1] + draw_pos[1]) for p in outline]
+
+                        # 縁取りの透過
+                        temp_surf = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+                        pygame.draw.lines(temp_surf, (255, 255, 0, 255), True, outline_points, 2)
+                        self.screen.blit(temp_surf, (0, 0))
+
                 self.screen.blit(rotated_image, draw_pos)
                 return # リアル画像での描画に成功したら終了
 
