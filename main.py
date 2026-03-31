@@ -255,16 +255,8 @@ class SpaceDebrisApp:
 
             events = self.engine.step()
             for event in events:
-                print(f"Collision: {event.impact_speed_cano * (SEC_TO_TU / METER_TO_DU)}")
-
-                if event.body1_destroyed:
-                    print("BODY 1 HAS BEEN DESTROYED!")
-                    self.engine.remove_body(event.body1)
-                if event.body2_destroyed:
-                    print("BODY 2 HAS BEEN DESTROYED!")
-                    self.engine.remove_body(event.body2)
-
-                print()
+                if event.body1_destroyed: self.engine.remove_body(event.body1)
+                if event.body2_destroyed: self.engine.remove_body(event.body2)
 
             self.time_accumulator -= current_physics_dt_tu
             self.simulation_time += timedelta(seconds=current_physics_dt_tu * TU_TO_SEC) # ループの外でもほぼ問題ないが，厳密を期すならココ．

@@ -111,11 +111,11 @@ class GravityEngine:
                     delta_energy = 0.5 * reduced_mass * (1 - (self.restitution_coefficient ** 2)) * (impact_speed ** 2)
 
                     # 個別に破壊判定
-                    b1_destroyed = delta_energy > b1.crash_tolerance_joules
-                    b2_destroyed = delta_energy > b2.crash_tolerance_joules
+                    b1_destroyed = delta_energy > b1.crash_tolerance_cano
+                    b2_destroyed = delta_energy > b2.crash_tolerance_cano
                     print(f"dE: {delta_energy}")
-                    print(f"b1.crash_tolerance_joules: {b1.crash_tolerance_joules}")
-                    print(f"b2.crash_tolerance_joules: {b2.crash_tolerance_joules}")
+                    print(f"b1.crash_tolerance_joules: {b1.crash_tolerance_cano}")
+                    print(f"b2.crash_tolerance_joules: {b2.crash_tolerance_cano}")
 
                     # --- 破壊判定ココマデ ---
 
