@@ -49,8 +49,26 @@ class GameRenderer:
         """宇宙の天体・オブジェクトを描画する"""
         for body in bodies:
             if body.is_fixed:
-                fixed_pos = self.camera.world_to_screen(body.position)
-                pygame.draw.circle(self.screen, COLOR_EARTH, fixed_pos, int(1.0 * self.camera.pixels_per_du))
+                earth_pos = self.camera.world_to_screen(body.position)
+                earth_r = self.camera.pixels_per_du
+                
+                screen_w, screen_h = self.screen.get_size()
+                
+                # 地球のバウンディングボックス（外接矩形）が画面の範囲内にあるか判定
+                is_on_screen = not (
+                    earth_pos[0] + earth_r < 0 or 
+                    earth_pos[0] - earth_r > screen_w or
+                    earth_pos[1] + earth_r < 0 or 
+                    earth_pos[1] - earth_r > screen_h
+                )
+                
+                if is_on_screen:
+                    # Pygameのdraw.circleは巨大すぎる半径を与えるとフリーズするため，安全な上限を設ける．
+                    if earth_r < 30000:
+                        pygame.draw.circle(self.screen, COLOR_EARTH, earth_pos, earth_r)
+                    else:
+                        # 描画限界を超えるズームで地球に肉薄している（または中にいる）場合，パフォーマンス保護のため画面全体を地球色で塗りつぶす．
+                        self.screen.fill(COLOR_EARTH)
             else:
                 is_selected = (body is selected_body)
                 self._draw_realistic_body(body, is_selected)
