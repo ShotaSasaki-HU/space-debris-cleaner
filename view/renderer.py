@@ -163,8 +163,9 @@ class GameRenderer:
         self.screen.blit(self.font.render("Q/E: Manual Rotation (SAS OFF) | R: Toggle SAS", True, help_color), (20, 80))
 
         # スロットル
-        self._draw_bar_gauge(screen=self.screen, cx=self.screen.get_width() - 200, cy=self.screen.get_height() - 200, w=50, h=150, angle=0.0,
-                             min_val=0.0, max_val=1.0, input_val=throttle, full_color=(255, 0, 0), stack_labels=['Throttle', f'{throttle * 100:.0f}%'])
+        self._draw_bar_gauge(screen=self.screen, cx=self.screen.get_width() - 200, cy=self.screen.get_height() - 200, w=50, h=150,
+                             angle=0.0, min_val=0.0, max_val=1.0, input_val=throttle, full_color=(255, 0, 0),
+                             stack_labels=['Throttle', f'{throttle * 100:.0f}%'], is_gradation=False)
 
         # --- スラスター動作状況ココカラ ---
 
@@ -214,7 +215,8 @@ class GameRenderer:
                 max_val=1.0,
                 input_val=val_i,
                 full_color=(255, 0, 0),
-                stack_labels=['THR', f'{MAX_THRUST_NEWTON * val_i:.1f} N']
+                stack_labels=['THR', f'{MAX_THRUST_NEWTON * val_i:.1f} N'],
+                is_gradation=True
             )
         
         ## --- トルク表示ココカラ ---
@@ -227,32 +229,38 @@ class GameRenderer:
         val_cw = max(0.0, -torque_nm)
 
         # 正のトルク（CCW）
-        self._draw_bar_gauge(
+        self._draw_circular_gauge(
             screen=self.screen,
-            cx=cx - (bar_h / 2),
-            cy=cy - offset - 100,
-            w=bar_w,
-            h=bar_h,
-            angle=np.pi / 2,
+            cx=cx,
+            cy=cy,
+            radius=2.8 * offset,
+            thickness=10,
             min_val=0.0,
             max_val=MAX_TORQUE_NM,
             input_val=val_ccw,
             full_color=(0, 255, 0),
-            stack_labels=[]
+            labels=[],
+            start_angle_rad=np.deg2rad(90),
+            end_angle_rad=np.deg2rad(150),
+            is_flipped_horizontally=False,
+            is_gradation=True
         )
         # 負のトルク（CW）
-        self._draw_bar_gauge(
+        self._draw_circular_gauge(
             screen=self.screen,
-            cx=cx + (bar_h / 2),
-            cy=cy - offset - 100,
-            w=bar_w,
-            h=bar_h,
-            angle=-np.pi / 2,
+            cx=cx,
+            cy=cy,
+            radius=2.8* offset,
+            thickness=10,
             min_val=0.0,
             max_val=MAX_TORQUE_NM,
             input_val=val_cw,
             full_color=(0, 255, 0),
-            stack_labels=[]
+            labels=[],
+            start_angle_rad=np.deg2rad(90),
+            end_angle_rad=np.deg2rad(150),
+            is_flipped_horizontally=True,
+            is_gradation=True
         )
 
         torque_text = f'TRQ'
@@ -269,8 +277,8 @@ class GameRenderer:
 
         # --- スラスター動作状況ココマデ ---
 
-    def _draw_bar_gauge(self, screen: pygame.Surface, cx: int, cy: int, w: int, h: int, angle: float,
-                        min_val: float, max_val: float, input_val: float, full_color: tuple, stack_labels: list[str]):
+    def _draw_bar_gauge(self, screen: pygame.Surface, cx: int, cy: int, w: int, h: int, angle: float, min_val: float,
+                        max_val: float, input_val: float, full_color: tuple, stack_labels: list[str], is_gradation: bool):
         """
         ゲージコンポーネント
 
@@ -280,18 +288,19 @@ class GameRenderer:
             cy (int): バーゲージ中心のy座標
             w (int): 幅
             h (int): 高さ
-            angle (float): バーゲージ左上まわりの回転角度（ラジアン）
+            angle (float): バーゲージ中心まわりの回転角度（ラジアン）
             min_val (float): 最小値
             max_val (float): 最大値
             input_val (float): 入力値
-            full_color (tuple): inputが1.0の時の色
+            full_color (tuple): inputが最大の時の色
             stack_labels (list[str]): 縦積みで表示するテキスト
+            is_gradation (bool): グラデーションフラグ
         """
         input_val = np.clip(input_val, min_val, max_val)
         normalized_input_val = (input_val - min_val) / (max_val - min_val)
 
-        # inputが0なら白，1ならfull_color．
-        color = tuple(-((255 - ch) * normalized_input_val) + 255 for ch in full_color)
+        # グラデーションの場合，inputが0なら白，1ならfull_color．
+        color = tuple(-((255 - ch) * normalized_input_val) + 255 for ch in full_color) if is_gradation else full_color
 
         # バーゲージ本体
         fill_h = int(h * normalized_input_val)
@@ -372,3 +381,105 @@ class GameRenderer:
         ff_rate_surf = self.font.render(ff_rate_str, True, COLOR_UI_TEXT)
         ff_rate_rect = ff_rate_surf.get_rect(midleft=(met_rect.centerx + (met_surf.get_size()[0] // 2) + 10, 20))
         self.screen.blit(ff_rate_surf, ff_rate_rect.topleft)
+    
+    def _draw_fan_shape(self, screen: pygame.Surface, cx: int, cy: int, radius: int, thickness: int,
+                        start_angle_rad: float, end_angle_rad: float, color: tuple, is_flipped_horizontally: bool):
+        """
+        扇形を描画するコンポーネント
+        
+        Args:
+            screen (pygame.Surface): 描画対象のサーフェス
+            cx, cy (int): 中心座標
+            radius (int): 外径
+            thickness (int): ゲージの太さ（ピクセル）
+            start_angle_rad (float): 描画開始角度（ラジアン，画面右を0とし反時計回り）
+            end_angle_rad (float): 描画終了角度（ラジアン）
+            color (tuplr): 塗りつぶし色
+            is_flipped_horizontally (bool): 左右反転フラグ
+        """
+        if start_angle_rad == end_angle_rad: # 角度差が0の場合
+            return
+
+        # 描画の滑らかさ（分割数）を角度の大きさに応じて動的に決定
+        angle_diff = abs(end_angle_rad - start_angle_rad)
+        steps = max(10, int(np.degrees(angle_diff) * 0.5)) 
+        
+        points = []
+        sign = -1 if is_flipped_horizontally else 1
+        
+        # 外側の円弧の頂点を計算（開始角度 -> 終了角度）
+        for i in range(steps + 1):
+            theta = start_angle_rad + angle_diff * (i / steps)
+            x = cx + sign * radius * np.cos(theta)
+            y = cy - radius * np.sin(theta) # PyGameのY軸は下が正方向
+            points.append((x, y))
+            
+        # 内側の円弧の頂点を計算（終了角度 -> 開始角度へと逆順で戻る）
+        inner_radius = radius - thickness
+        for i in range(steps, -1, -1):
+            theta = start_angle_rad + angle_diff * (i / steps)
+            x = cx + sign * inner_radius * np.cos(theta)
+            y = cy - inner_radius * np.sin(theta) # PyGameのY軸は下が正方向
+            points.append((x, y))
+            
+        # 頂点を結んで多角形として塗りつぶす．
+        if len(points) > 2:
+            pygame.draw.polygon(screen, color, points)
+            pygame.draw.aalines(screen, color, True, points) # アンチエイリアスあり
+    
+    def _draw_circular_gauge(self, screen: pygame.Surface, cx: int, cy: int, radius: int, thickness: int,
+                             min_val: float, max_val: float, input_val: float, full_color: tuple, labels: list[str],
+                             start_angle_rad: float, end_angle_rad: float, is_flipped_horizontally: bool, is_gradation: bool):
+        """
+        扇形ゲージコンポーネント
+
+        Args:
+            screen (pygame.Surface): 描画先
+            cx (int): 中心のx座標
+            cy (int): 中心のy座標
+            radius (int): 外径
+            thickness (int): ゲージの太さ（ピクセル）
+            min_val (float): 最小値
+            max_val (float): 最大値
+            input_val (float): 入力値
+            full_color (tuple): inputが最大の時の色
+            labels (list[str]): 中心に表示するテキスト
+            start_angle_rad (float): 描画開始角度（ラジアン，画面右を0とし反時計回り）
+            end_angle_rad (float): 描画終了角度（ラジアン）
+            is_flipped_horizontally (bool): 左右反転フラグ
+        """
+        # 暗いグレーの背景
+        self._draw_fan_shape(screen, cx, cy, radius, thickness, start_angle_rad, end_angle_rad, (50, 50, 50), is_flipped_horizontally)
+        
+        # --- メインの扇ココカラ ---
+
+        input_val = np.clip(input_val, min_val, max_val)
+        normalized_input_val = (input_val - min_val) / (max_val - min_val)
+
+        # グラデーションの場合，inputが0なら白，1ならfull_color．
+        color = tuple(-((255 - ch) * normalized_input_val) + 255 for ch in full_color) if is_gradation else full_color
+
+        angle = normalized_input_val * (end_angle_rad - start_angle_rad)
+        self._draw_fan_shape(screen, cx, cy, radius, thickness, start_angle_rad, start_angle_rad + angle, color, is_flipped_horizontally)
+
+        # --- メインの扇ココマデ ---
+
+        # --- ラベルココカラ ---
+
+        if not labels: return
+
+        label_surfs = [self.font.render(label, True, COLOR_UI_TEXT) for label in labels] # 各ラベルに対するサーフェス
+
+        # ラベル群全体のバウンディングボックス寸法
+        spacing = 2
+        total_text_h = sum([surf.get_size()[1] for surf in label_surfs]) + (spacing * (len(labels) - 1))
+
+        # 各ラベルの中心位置を計算して配置
+        total_text_y_top = cy - (total_text_h / 2)
+        line_h = self.font.get_linesize() # フォント高さ
+        for i, label_surf in enumerate(label_surfs):
+            label_center_y = total_text_y_top + ((2 * i) + 1) * (line_h / 2)
+            label_rect = label_surf.get_rect(center=(cx, label_center_y))
+            screen.blit(label_surf, label_rect.topleft)
+
+        # --- ラベルココマデ ---
