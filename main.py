@@ -53,7 +53,7 @@ class SpaceDebrisApp:
         M_earth = KG_TO_MU * EARTH_MASS_KG
         self.earth = RigidBody(mass=M_earth, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), is_fixed=True)
         
-        r_player = METER_TO_DU * (EARTH_RADIUS_M + 10010e3)
+        r_player = METER_TO_DU * (EARTH_RADIUS_M + 410e3)
         v_player = np.sqrt(G_CANONICAL * M_earth / r_player)
         m_sat_cano = CLEANER_SAT_MASS_KG * KG_TO_MU
         i_sat_cano = CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2 * KG_TO_MU * (METER_TO_DU ** 2)
@@ -69,7 +69,7 @@ class SpaceDebrisApp:
             draw_fixed_size_px=30
         )
 
-        r_2nd_stage = METER_TO_DU * (EARTH_RADIUS_M + 10000e3)
+        r_2nd_stage = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
         v_2nd_stage = np.sqrt(G_CANONICAL * M_earth / r_2nd_stage)
         m_2nd_stage_cano = 3000 * KG_TO_MU # H-IIAロケット15号機の上段
         i_2nd_stage_cano = 33250 * KG_TO_MU * (METER_TO_DU ** 2) # 円柱の中心軸に垂直な軸まわりの慣性モーメント
@@ -114,7 +114,7 @@ class SpaceDebrisApp:
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_t:
+                if event.key == pygame.K_r:
                     self.sas_enabled = not self.sas_enabled
                 # カメラの3段階切り替えロジック（エンターキー）
                 elif event.key == pygame.K_RSHIFT:

@@ -160,7 +160,7 @@ class GameRenderer:
         
         help_color = (150, 150, 150)
         self.screen.blit(self.font.render("W/S: Forward/Backward | A/D: Left/Right", True, help_color), (20, 60))
-        self.screen.blit(self.font.render("Q/E: Manual Rotation (SAS OFF) | T: Toggle SAS", True, help_color), (20, 80))
+        self.screen.blit(self.font.render("Q/E: Manual Rotation (SAS OFF) | R: Toggle SAS", True, help_color), (20, 80))
 
         # スロットル
         self._draw_bar_gauge(screen=self.screen, cx=self.screen.get_width() - 200, cy=self.screen.get_height() - 200, w=50, h=150, angle=0.0,
