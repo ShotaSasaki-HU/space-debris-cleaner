@@ -196,7 +196,7 @@ class SpaceDebrisApp:
                 
                 if type(self.renderer.camera) is Camera:
                     if event.key == pygame.K_RIGHT:
-                        max_pixels_per_du = min(SCREEN_WIDTH, SCREEN_HEIGHT) / (1.2 * 2.0) # 地球の直径 = 2DU
+                        max_pixels_per_du = min(SCREEN_WIDTH, SCREEN_HEIGHT) / (1.3 * 2.0) # 地球の直径 = 2DU
                         self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
                     elif event.key == pygame.K_LEFT:
                         self.renderer.camera.set_pixels_per_du(max(30, self.renderer.camera.get_pixels_per_du() // 2))
