@@ -3,9 +3,11 @@ import pygame
 import numpy as np
 from typing import Dict
 from datetime import datetime
+from skyfield.api import load, Star
+from skyfield.data import hipparcos
 
 from physics.body import RigidBody
-from view.camera import Camera
+from view.camera import Camera, RelativeCamera
 from physics.constants import METER_TO_DU, SEC_TO_TU, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL
 
 COLOR_EARTH = (50, 150, 255)
@@ -25,6 +27,8 @@ class GameRenderer:
         self.font = pygame.font.SysFont("couriernew", 20)
         self.prediction_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
         self.scaled_cache: Dict[str, tuple[int, int, pygame.Surface]] = {}
+
+        self._setup_starry_sky()
 
     def clear(self, bg_color: tuple = (10, 10, 20)):
         """画面をクリアする"""
@@ -524,3 +528,81 @@ class GameRenderer:
             screen.blit(label_surf, label_rect.topleft)
 
         # --- ラベルココマデ ---
+    
+    def _setup_starry_sky(self):
+        """起動時に1度だけ星をロード"""
+        with load.open(hipparcos.URL) as f:
+            df = hipparcos.load_dataframe(f)
+        
+        bright_df = df[df['magnitude'] <= 6.0]
+        self.star_positions = Star.from_dataframe(bright_df)
+        self.star_ra = np.radians(bright_df['ra_degrees'].values) # 星の赤経（RA）
+        self.star_dec = np.radians(bright_df['dec_degrees'].values) # 星の赤緯（DEC）
+        self.star_mags = bright_df['magnitude'].values
+
+        self.ts = load.timescale()
+    
+    def draw_starry_sky(self, simulation_time: datetime):
+        """背景の星空を描画する"""
+        t = self.ts.from_datetime(simulation_time)
+        gast_hours = t.gast # グリニッジ視恒星時（0〜24時）
+        
+        # メキシコ上空（GAST - 6h）から地球を見る時，視線の向きはさらに+12時間反対側になる．
+        center_ra_hours = (gast_hours - 6.0 + 12.0) % 24.0 # 地方恒星時
+        center_ra_rad = center_ra_hours * (np.pi / 12.0) # 2piラジアン / 24時間
+
+        half_w = self.screen.get_width() // 2
+        half_h = self.screen.get_height() // 2
+
+        # 画面の対角線距離（ピクセル）を計算
+        # 画面がどう回転しても，中心から画面の端までの最大距離はコレになる．
+        diagonal = np.hypot(half_w, half_h)
+
+        # カメラの倍率に依存しない固定スケール（カメラの視野角は固定で，ドリーイン・ドリーアウトする．）
+        # 宇宙の最も「狭い」方向は赤緯（DEC）の ±pi/2 ラジアン．この ±pi/2 が，画面の対角線をすっぽり覆うようにスケール．
+        fixed_scale = diagonal / (np.pi / 2.0)
+
+        # 赤経の差分を -pi から pi に収める．
+        d_ra = (self.star_ra - center_ra_rad + np.pi) % (2 * np.pi) - np.pi
+        
+        x_coords = half_w - (d_ra * fixed_scale) # 天球の内側から見て東（RA大）は左側なのでマイナス
+        y_coords = half_h - (self.star_dec * fixed_scale) # 北極（DEC大）は画面上なのでマイナス
+
+        if isinstance(self.camera, RelativeCamera):
+            # ターゲットの「地球に対する角度（位相）」を計算
+            target_pos = self.camera.get_target_body().position
+            theta = np.atan2(target_pos[1], target_pos[0])
+            
+            rot_angle = (np.pi / 2.0) - theta # ターゲットを真上に持ってくるために回している角度
+            
+            # 画面中心を原点とした相対座標（星は遠すぎるため見え方が不変で，画面中心の回転でよい．）
+            dx = x_coords - half_w
+            dy = y_coords - half_h
+            
+            cos_t = np.cos(rot_angle)
+            sin_t = np.sin(rot_angle)
+            
+            # Y軸下向き座標系での回転演算
+            rotated_x = dx * cos_t + dy * sin_t
+            rotated_y = -dx * sin_t + dy * cos_t
+            
+            # 再び画面座標に戻す．
+            x_coords = rotated_x + half_w
+            y_coords = rotated_y + half_h
+        
+        # 画面内に収まっている星のインデックスを取得（カリング）
+        visible_mask = (x_coords > -10) & (x_coords < (half_w * 2) + 10) & \
+                       (y_coords > -10) & (y_coords < (half_h * 2) + 10)
+        
+        visible_x = x_coords[visible_mask]
+        visible_y = y_coords[visible_mask]
+        visible_mags = self.star_mags[visible_mask]
+        
+        # 描画
+        for x, y, mag in zip(visible_x, visible_y, visible_mags):
+            # 等級が小さいほど明るく，大きな円で描く．
+            size = max(1, int((6.0 - mag) * 0.7))
+            brightness = max(50, min(255, int(255 - (mag - 1.0) * 40)))
+            color = (brightness, brightness, brightness)
+            
+            pygame.draw.circle(self.screen, color, (int(x), int(y)), size)

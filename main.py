@@ -267,6 +267,7 @@ class SpaceDebrisApp:
     def render(self):
         """画面の描画"""
         self.renderer.clear()
+        self.renderer.draw_starry_sky(simulation_time=self.simulation_time)
         self.renderer.draw_predictions(self.orbital_predictions, player=self.player_sat)
         self.renderer.draw_bodies(bodies=self.engine.bodies, selected_body=self.selected_body)
         self.renderer.draw_ui(self.player_sat, self.selected_body, self.sas_enabled, self.throttle,

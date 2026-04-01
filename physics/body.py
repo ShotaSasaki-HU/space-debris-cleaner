@@ -90,4 +90,5 @@ class RigidBody:
         self.applied_force.fill(0.0)
         self.applied_torque = 0.0
     
+    def get_position(self) -> np.ndarray: return self.position
     def get_collision_radius(self) -> float: return self.collision_radius
