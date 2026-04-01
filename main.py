@@ -64,24 +64,6 @@ class SpaceDebrisApp:
             draw_fixed_size_px=30
         )
         self.engine.add_body(self.earth)
-        
-        # プレイヤー
-        r_player = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
-        v_player = np.sqrt(G_CANONICAL * M_earth / r_player)
-        m_sat_cano = CLEANER_SAT_MASS_KG * KG_TO_MU
-        i_sat_cano = CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2 * KG_TO_MU * (METER_TO_DU ** 2)
-        self.player_sat = RigidBody(
-            mass=m_sat_cano,
-            position=np.array([r_player, 0.0]),
-            velocity=np.array([0.0, v_player]),
-            moment_of_inertia=i_sat_cano,
-            angle=np.pi / 2.0,
-            image_path="assets/images/player_sat.png",
-            real_width_du=CLEANER_SAT_SIZE_METER[0] * METER_TO_DU,
-            real_height_du=CLEANER_SAT_SIZE_METER[1] * METER_TO_DU,
-            draw_fixed_size_px=30
-        )
-        self.engine.add_body(self.player_sat)
 
         # 複数のデブリ
         r_base = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
@@ -108,7 +90,25 @@ class SpaceDebrisApp:
                 draw_fixed_size_px=30
             )
             self.engine.add_body(debri)
-        self.selected_body = self.engine.bodies[-1] # 初期ターゲットの設定
+        self.selected_body = self.engine.bodies[-1] # 初期ターゲットの設定（プレイヤー追加前に実施）
+
+        # プレイヤー
+        r_player = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
+        v_player = np.sqrt(G_CANONICAL * M_earth / r_player)
+        m_sat_cano = CLEANER_SAT_MASS_KG * KG_TO_MU
+        i_sat_cano = CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2 * KG_TO_MU * (METER_TO_DU ** 2)
+        self.player_sat = RigidBody(
+            mass=m_sat_cano,
+            position=np.array([r_player, 0.0]),
+            velocity=np.array([0.0, v_player]),
+            moment_of_inertia=i_sat_cano,
+            angle=np.pi / 2.0,
+            image_path="assets/images/player_sat.png",
+            real_width_du=CLEANER_SAT_SIZE_METER[0] * METER_TO_DU,
+            real_height_du=CLEANER_SAT_SIZE_METER[1] * METER_TO_DU,
+            draw_fixed_size_px=30
+        )
+        self.engine.add_body(self.player_sat)
 
         self.engine.initialize()
 
