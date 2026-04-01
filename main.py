@@ -43,6 +43,11 @@ class SpaceDebrisApp:
         self.simulation_time = datetime.now(timezone.utc) # ゲーム内の時刻（物理演算には関係しない．）
         self.mission_start_time = self.simulation_time
 
+        # 捕獲システムのステートマシンと変数
+        self.capture_state = 'IDLE' # 'IDLE', 'CAPTURING', 'DOCKED'
+        self.capture_progress = 0.0 # 捕獲の進捗（0.0〜1.0）
+        self.capture_time_required_sec = 10.0 # 捕獲完了に必要な継続接触時間（秒）
+
         self._setup_physics()
         self._setup_view()
         self._setup_controls()
@@ -165,7 +170,7 @@ class SpaceDebrisApp:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:
                     self.sas_enabled = not self.sas_enabled
-                # カメラの3段階切り替えロジック（エンターキー）
+                # カメラの3段階切り替えロジック
                 elif event.key == pygame.K_RSHIFT:
                     if self.view_mode == "EARTH":
                         self.view_mode = "TRACKING"
@@ -178,6 +183,12 @@ class SpaceDebrisApp:
                     self.fast_forward_rate = min(1000.0, self.fast_forward_rate * 10.0)
                 elif event.key == pygame.K_COMMA:
                     self.fast_forward_rate = max(1.0, self.fast_forward_rate / 10.0)
+                # 捕獲・リリース操作
+                elif event.key == pygame.K_RETURN:
+                    if self.capture_state in ['CAPTURING', 'DOCKED']:
+                        self.capture_state = 'IDLE'
+                        self.capture_progress = 0.0
+                        print("ARM RETRACTED.")
                 
                 if type(self.renderer.camera) is Camera:
                     if event.key == pygame.K_RIGHT:
@@ -236,6 +247,49 @@ class SpaceDebrisApp:
             if keys[pygame.K_q]: self.player_torque = self.max_torque_cano * self.throttle
             if keys[pygame.K_e]: self.player_torque = -self.max_torque_cano * self.throttle
         self.player_sat.apply_torque(self.player_torque)
+    
+    def _check_capture_contact(self) -> bool:
+        """アーム先端がターゲットデブリに接触しているか判定"""
+        if not self.selected_body: return False
+
+        # アーム先端の物理座標を計算
+        arm_length_du = self.player_sat.real_width_du / 2.0
+        angle = self.player_sat.angle
+        tip_world_pos = self.player_sat.position + np.array([
+            arm_length_du * np.cos(angle),
+            arm_length_du * np.sin(angle)
+        ])
+
+        # ターゲットのpositionからアーム先端への相対位置ベクトル
+        rel_pos = tip_world_pos - self.selected_body.position
+        target_angle = self.selected_body.angle
+
+        # ターゲットの回転を打ち消す方向に，相対位置ベクトルを回す．
+        cos_t = np.cos(-target_angle)
+        sin_t = np.sin(-target_angle)
+        local_x_du = rel_pos[0] * cos_t - rel_pos[1] * sin_t
+        local_y_du = rel_pos[0] * sin_t + rel_pos[1] * cos_t
+
+        # Rendererのキャッシュからデブリの画像を取得
+        image = self.renderer.image_cache.get(self.selected_body.image_path)
+        if not image: return False
+
+        debri_w_px, debri_h_px = image.get_size()
+
+        # 水平なターゲットのpositionからアーム先端への相対位置ベクトル（px）
+        local_x_px = (local_x_du / self.selected_body.real_width_du) * debri_w_px
+        local_y_px = (local_y_du / self.selected_body.real_height_du) * debri_h_px
+
+        # ターゲット画像の左上(0, 0)からアーム先端への位置ベクトルへ変換
+        local_x_px = int(local_x_px + (debri_w_px / 2))
+        local_y_px = int(local_y_px + (debri_h_px / 2))
+
+        mask = pygame.mask.from_surface(image)
+        # アームの先端が「デブリ画像の範囲内」かつ「マスクが不透明」なら接触
+        if (0 <= local_x_px < debri_w_px) and (0 <= local_y_px < debri_h_px):
+            return mask.get_at((local_x_px, local_y_px)) != 0
+
+        return False
 
     def update(self, dt_real_sec: float):
         """
@@ -257,6 +311,34 @@ class SpaceDebrisApp:
             for event in events:
                 if event.body1_destroyed: self.engine.remove_body(event.body1)
                 if event.body2_destroyed: self.engine.remove_body(event.body2)
+            
+            # --- 捕獲判定ココカラ ---
+
+            if self.capture_state != 'DOCKED':
+                is_touching = self._check_capture_contact()
+
+                # 相対速度の閾値チェック
+                v_rel = np.linalg.norm(self.player_sat.velocity - self.selected_body.velocity)
+                v_rel_si = v_rel * (SEC_TO_TU / METER_TO_DU)
+                is_slow_enough = v_rel_si <= 0.05 # 0.05m/s以下 <=> 5cm/s以下
+
+                if is_touching and is_slow_enough:
+                    self.capture_state = 'CAPTURING'
+                    # プログレスを進める．（1ステップ分の時間を加算）
+                    current_physics_dt_sec = current_physics_dt_tu * TU_TO_SEC
+                    self.capture_progress += current_physics_dt_sec / self.capture_time_required_sec
+
+                    if self.capture_progress >= 1.0:
+                        self.capture_state = 'DOCKED'
+                        self.capture_progress = 1.0
+                        print("SUCCESS: Target Docked.")
+                else:
+                    # 離れたり早すぎたりしたら捕獲プログレスをリセット
+                    if self.capture_state == 'CAPTURING':
+                        self.capture_state = 'IDLE'
+                        self.capture_progress = 0.0
+
+            # --- 捕獲判定ココマデ ---
 
             self.time_accumulator -= current_physics_dt_tu
             self.simulation_time += timedelta(seconds=current_physics_dt_tu * TU_TO_SEC) # ループの外でもほぼ問題ないが，厳密を期すならココ．
@@ -270,8 +352,8 @@ class SpaceDebrisApp:
         self.renderer.draw_starry_sky(simulation_time=self.simulation_time)
         self.renderer.draw_predictions(self.orbital_predictions, player=self.player_sat)
         self.renderer.draw_bodies(bodies=self.engine.bodies, selected_body=self.selected_body)
-        self.renderer.draw_ui(self.player_sat, self.selected_body, self.sas_enabled, self.throttle,
-                              self.player_torque, self.mission_start_time, self.simulation_time, self.fast_forward_rate)
+        self.renderer.draw_ui(self.player_sat, self.selected_body, self.sas_enabled, self.throttle, self.player_torque,
+                              self.mission_start_time, self.simulation_time, self.fast_forward_rate, self.capture_state, self.capture_progress)
         pygame.display.flip()
 
     def run(self):

@@ -113,9 +113,9 @@ class GravityEngine:
                     # 個別に破壊判定
                     b1_destroyed = delta_energy > b1.crash_tolerance_cano
                     b2_destroyed = delta_energy > b2.crash_tolerance_cano
-                    print(f"dE: {delta_energy}")
-                    print(f"b1.crash_tolerance_joules: {b1.crash_tolerance_cano}")
-                    print(f"b2.crash_tolerance_joules: {b2.crash_tolerance_cano}")
+                    # print(f"dE: {delta_energy}")
+                    # print(f"b1.crash_tolerance_joules: {b1.crash_tolerance_cano}")
+                    # print(f"b2.crash_tolerance_joules: {b2.crash_tolerance_cano}")
 
                     # --- 破壊判定ココマデ ---
 

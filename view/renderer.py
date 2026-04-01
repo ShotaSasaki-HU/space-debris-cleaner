@@ -163,12 +163,13 @@ class GameRenderer:
         body_screen_pos = self.camera.world_to_screen(body.position)
         pygame.draw.rect(self.screen, (255, 255, 255), (body_screen_pos[0]-6, body_screen_pos[1]-6, 12, 12))
 
-    def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float,
-                player_torque: float, mission_start_time: datetime, simulation_time: datetime, fast_forward_rate: float):
+    def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float, player_torque: float,
+                mission_start_time: datetime, simulation_time: datetime, fast_forward_rate: float, capture_state: str, progress: float):
         """各種UIを描画する"""
         self._draw_rel_nav_ui(player, target)
         self._draw_control_console(sas_enabled, throttle, player, player_torque)
         self._draw_time(mission_start_time, simulation_time, fast_forward_rate)
+        self._draw_capture_ui(capture_state, progress)
 
     def _draw_rel_nav_ui(self, player: RigidBody, target: RigidBody):
         """相対ナビゲーションUI"""
@@ -606,3 +607,40 @@ class GameRenderer:
             color = (brightness, brightness, brightness)
             
             pygame.draw.circle(self.screen, color, (int(x), int(y)), size)
+    
+    def _draw_capture_ui(self, capture_state: str, progress: float):
+        """捕獲状態とプログレスバーの描画"""
+        screen_w = self.screen.get_width()
+        screen_h = self.screen.get_height()
+
+        # 状態テキストの描画
+        state_color = COLOR_UI_TEXT
+        text = "ARM: IDLE (APPROACH TARGET)"
+        if capture_state == "IDLE":
+            state_color = (255, 200, 0)
+            text = "ARM: IDLE (APPROACH TARGET)"
+        elif capture_state == "CAPTURING":
+            state_color = (0, 255, 255)
+            text = "CAPTURING... KEEP POSITION!"
+        elif capture_state == "DOCKED":
+            state_color = (0, 255, 0)
+            text = "TARGET DOCKED! (PRESS ENTER TO RELEASE)"
+        
+        text_surface = self.font.render(text, True, state_color)
+        self.screen.blit(text_surface, (screen_w // 2 - text_surface.get_width() // 2, screen_h - 80))
+
+        # プログレスバーの描画
+        self._draw_bar_gauge(
+            screen=self.screen,
+            cx=screen_w // 2,
+            cy=screen_h - 40,
+            w=20,
+            h=350,
+            angle=-np.pi / 2,
+            min_val=0.0,
+            max_val=1.0,
+            input_val=progress,
+            full_color=state_color,
+            stack_labels=[f"{int(progress * 100)}%"],
+            is_gradation=False
+        )
