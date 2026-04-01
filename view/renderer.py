@@ -208,9 +208,9 @@ class GameRenderer:
         self.screen.blit(self.font.render("Q/E: Manual Rotation (SAS OFF) | R: Toggle SAS", True, help_color), (20, 80))
 
         # スロットル
-        self._draw_bar_gauge(screen=self.screen, cx=self.screen.get_width() - 200, cy=self.screen.get_height() - 200, w=50, h=150,
+        self._draw_bar_gauge(screen=self.screen, cx=self.screen.get_width() - 85, cy=self.screen.get_height() - 105, w=50, h=150,
                              angle=0.0, min_val=0.0, max_val=1.0, input_val=throttle, full_color=(255, 0, 0),
-                             stack_labels=['Throttle', f'{throttle * 100:.0f}%'], is_gradation=False)
+                             stack_labels=['Throttle', f'{throttle * 100:.0f}%'], is_gradation=True)
 
         # --- スラスター動作状況ココカラ ---
 
