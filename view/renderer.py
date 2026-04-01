@@ -52,9 +52,9 @@ class GameRenderer:
         """宇宙の天体・オブジェクトを描画する"""
         for body in bodies:
             is_selected = (body is selected_body)
-            self._draw_realistic_body(body=body, is_selecetd=is_selected)
+            self._draw_realistic_body(body=body, is_selected=is_selected)
 
-    def _draw_realistic_body(self, body: RigidBody, is_selecetd: bool = False):
+    def _draw_realistic_body(self, body: RigidBody, is_selected: bool = False):
         """画像をロードし，視点に合わせてスケーリング・回転して描画する．"""
         if body.image_path:
             if body.image_path not in self.image_cache:
@@ -85,11 +85,23 @@ class GameRenderer:
                 
                 # 厳密性に欠けるが，大きすぎる画像はクラッシュを起こすため放棄する．
                 if target_w > 5000 or target_h > 5000: return
+
+                # --- オフセット適用ココカラ ---
+
+                visual_offset_world = np.array([0.0, 0.0])
+                if hasattr(body, 'visual_offset_local') and np.any(body.visual_offset_local):
+                    cos_b = np.cos(body.angle)
+                    sin_b = np.sin(body.angle)
+                    lx, ly = body.visual_offset_local
+                    visual_offset_world = np.array([lx * cos_b - ly * sin_b, lx * sin_b + ly * cos_b])
+
+                # 重心位置にオフセットを足した場所をスクリーンの中心とする
+                body_pos_px = self.camera.world_to_screen(body.position + visual_offset_world) # 物理エンジンの座標を画面座標へ変換
+
+                # --- オフセット適用ココマデ ---
                 
                 # --- カリングココカラ ---
 
-                body_pos_px = self.camera.world_to_screen(body.position)
-                
                 # 画像のだいたいの半径
                 approx_radius = max(target_w, target_h) * 0.75
                 screen_w, screen_h = self.screen.get_size()
@@ -138,13 +150,34 @@ class GameRenderer:
                     theta = np.atan2(self.camera.target_body.position[1], self.camera.target_body.position[0])
                     rotated_image = pygame.transform.rotate(scaled_image, np.rad2deg((np.pi / 2) - theta + body.angle))
                 
-                screen_pos = self.camera.world_to_screen(body.position) # 物理エンジンの座標を画面座標へ変換
                 rotated_rect = rotated_image.get_rect() # 回転後の画像サイズを取得
-                draw_pos = (screen_pos[0] - rotated_rect.width // 2,
-                            screen_pos[1] - rotated_rect.height // 2) # 画像の中心座標を取得
+                draw_pos = (body_pos_px[0] - rotated_rect.width // 2,
+                            body_pos_px[1] - rotated_rect.height // 2) # 画像の中心座標を取得
+
+                # 結合されているターゲットの再帰描画
+                if getattr(body, 'docked_body', None):
+                    docked = body.docked_body
+                        
+                    dx, dy = body.docked_offset_local
+                    docked_offset_world = np.array([dx * cos_b - dy * sin_b, dx * sin_b + dy * cos_b])
+                        
+                    # 元のパラメータを退避
+                    orig_pos = docked.position
+                    orig_angle = docked.angle
+                        
+                    # 親の座標と角度に追従させて一時的に上書き
+                    docked.position = body.position + docked_offset_world
+                    docked.angle = body.angle + body.docked_rel_angle
+                        
+                    # 再帰描画（縁取りは消す）
+                    self._draw_realistic_body(docked, is_selected=False)
+                        
+                    # 復元
+                    docked.position = orig_pos
+                    docked.angle = orig_angle
                 
                 # 選択されているbodyの縁取り
-                if is_selecetd:
+                if is_selected:
                     opaque_mask = pygame.mask.from_surface(rotated_image) # 画像の非透過部分からマスクを生成
                     outline = opaque_mask.outline() # マスクの輪郭座標リスト
                     if len(outline) >= 2:
@@ -155,8 +188,9 @@ class GameRenderer:
                         temp_surf = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
                         pygame.draw.lines(temp_surf, (255, 255, 0, 255), True, outline_points, 2)
                         self.screen.blit(temp_surf, (0, 0))
+                
+                self.screen.blit(rotated_image, draw_pos) # ターゲットより後で前面に描画
 
-                self.screen.blit(rotated_image, draw_pos)
                 return # リアル画像での描画に成功したら終了
 
         # フォールバック（画像がない場合の描画）

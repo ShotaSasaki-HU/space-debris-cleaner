@@ -186,9 +186,13 @@ class SpaceDebrisApp:
                 # 捕獲・リリース操作
                 elif event.key == pygame.K_RETURN:
                     if self.capture_state in ['CAPTURING', 'DOCKED']:
+                        if self.capture_state == 'DOCKED':
+                            # リリースして，物理エンジンに再び単体の剛体として戻す．
+                            released_body = self.player_sat.undock()
+                            self.engine.add_body(released_body)
+                        
                         self.capture_state = 'IDLE'
                         self.capture_progress = 0.0
-                        print("ARM RETRACTED.")
                 
                 if type(self.renderer.camera) is Camera:
                     if event.key == pygame.K_RIGHT:
@@ -226,7 +230,12 @@ class SpaceDebrisApp:
         if keys[pygame.K_d]: thrust_y -= thrust_mag
 
         if thrust_x != 0 or thrust_y != 0:
-            self.player_sat.apply_local_force(thrust_x, thrust_y)
+            # DOCKED状態（重心がズレている）なら、オフセット位置から推力を加える
+            if hasattr(self.player_sat, 'visual_offset_local') and np.any(self.player_sat.visual_offset_local):
+                ox, oy = self.player_sat.visual_offset_local
+                self.player_sat.apply_local_force_at_offset(thrust_x, thrust_y, ox, oy)
+            else:
+                self.player_sat.apply_local_force(thrust_x, thrust_y)
         
         # 回転制御
         self.player_torque = 0.0
@@ -315,12 +324,16 @@ class SpaceDebrisApp:
             # --- 捕獲判定ココカラ ---
 
             if self.capture_state != 'DOCKED':
-                is_touching = self._check_capture_contact()
+                if self.fast_forward_rate > 5.0: # 早送り中は捕獲判定をスキップ
+                    is_touching = False
+                    is_slow_enough = False
+                else:
+                    is_touching = self._check_capture_contact()
 
-                # 相対速度の閾値チェック
-                v_rel = np.linalg.norm(self.player_sat.velocity - self.selected_body.velocity)
-                v_rel_si = v_rel * (SEC_TO_TU / METER_TO_DU)
-                is_slow_enough = v_rel_si <= 0.05 # 0.05m/s以下 <=> 5cm/s以下
+                    # 相対速度の閾値チェック
+                    v_rel = np.linalg.norm(self.player_sat.velocity - self.selected_body.velocity)
+                    v_rel_si = v_rel * (SEC_TO_TU / METER_TO_DU)
+                    is_slow_enough = v_rel_si <= 0.01 # 0.01m/s以下 <=> 1cm/s以下
 
                 if is_touching and is_slow_enough:
                     self.capture_state = 'CAPTURING'
@@ -331,7 +344,14 @@ class SpaceDebrisApp:
                     if self.capture_progress >= 1.0:
                         self.capture_state = 'DOCKED'
                         self.capture_progress = 1.0
-                        print("SUCCESS: Target Docked.")
+                        
+                        # エンジンからデブリを削除し，プレイヤーに結合する．
+                        self.engine.remove_body(self.selected_body)
+                        self.player_sat.dock_with(self.selected_body)
+
+                        # 追跡対象切り替え
+                        self.selected_body = self.player_sat
+                        self.tracking_camera.set_target_body(self.selected_body)
                 else:
                     # 離れたり早すぎたりしたら捕獲プログレスをリセット
                     if self.capture_state == 'CAPTURING':
