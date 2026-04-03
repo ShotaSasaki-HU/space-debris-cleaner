@@ -60,7 +60,11 @@ class RigidBody:
         self.real_height_du = real_height_du
         self.draw_fixed_size_px = draw_fixed_size_px
 
-        self.collision_radius: float = (min(real_width_du, real_height_du) / 2.0) * 0.8 # 衝突半径
+        # 衝突半径
+        if is_fixed:
+            self.collision_radius: float = min(real_width_du, real_height_du) / 2.0
+        else:
+            self.collision_radius: float = (min(real_width_du, real_height_du) / 2.0) * 0.8
         self.crash_tolerance_cano: float = mass / 1e7 # 構造強度（自身の質量の1/N倍のエネルギーまで耐えられると仮定．SI単位系ならジュール．）
 
         # 結合物理用の拡張パラメータ
