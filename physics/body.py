@@ -85,14 +85,14 @@ class RigidBody:
         
         self.applied_force += np.array([world_force_x, world_force_y])
     
-    def apply_local_force_at_offset(self, fx: float, fy: float, offset_x_local: float, offset_y_local: float):
+    def apply_local_force_at_offset(self, force_local_x: float, force_local_y: float, offset_x_local: float, offset_y_local: float):
         """重心からズレた位置にローカル座標系の力を加える．（トルクも発生）"""
         cos_t = np.cos(self.angle)
         sin_t = np.sin(self.angle)
 
         # 力のワールド変換
-        fx_world = fx * cos_t - fy * sin_t
-        fy_world = fx * sin_t + fy * cos_t
+        fx_world = force_local_x * cos_t - force_local_y * sin_t
+        fy_world = force_local_x * sin_t + force_local_y * cos_t
         self.applied_force += np.array([fx_world, fy_world])
 
         # 力の作用点のワールド変換（重心からの位置ベクトルr）
