@@ -524,6 +524,13 @@ class GameRenderer:
                 cy + half_grid_w + (half_grid_w * np.sin(angle))
             ))
             self.screen.blit(text_surf, text_rect.topleft)
+        
+        text_surf = self.font.render("REL V", True, COLOR_UI_TEXT)
+        text_rect = text_surf.get_rect(center=(
+            cx - (half_grid_w * 0.9),
+            cy + half_grid_w - (half_grid_w * 0.9)
+        ))
+        self.screen.blit(text_surf, text_rect.topleft)
 
         # --- 並進の正方形グリッド（相対速度・IMUの加速度）ココマデ ---
 
