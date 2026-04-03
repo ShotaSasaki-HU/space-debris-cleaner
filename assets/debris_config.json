@@ -1,0 +1,58 @@
+[
+  {
+    "name": "H-IIAロケット15号機の上段",
+    "description": "H-IIAロケット15号機の上段",
+    "mass_kg": 3000,
+    "position_m": [0.0, 7044137.0], 
+    "velocity_m_s": [-7522.3, 0.0],
+    "moment_of_inertia_kg_m2": 33250,
+    "angle_deg": 0.0,
+    "angular_velocity_deg_s": 0.01,
+    "width_m": 11.0,
+    "height_m": 4.0,
+    "image_path": "assets/images/debris_rocket_2nd_stage.png",
+    "draw_fixed_size_px": 30
+  },
+  {
+    "name": "MicroLab-G",
+    "description": "破損した小型科学衛星",
+    "mass_kg": 250.0,
+    "position_m": [0.0, -6888137.0], 
+    "velocity_m_s": [7607.0, 0.0],
+    "moment_of_inertia_kg_m2": 147.0,
+    "angle_deg": 0.0,
+    "angular_velocity_deg_s": 8.6,
+    "width_m": 2.97,
+    "height_m": 1.5,
+    "image_path": "assets/images/debris_microlab.png",
+    "draw_fixed_size_px": 30
+  },
+  {
+    "name": "Shrapnel-Alpha",
+    "description": "高速回転する鋭利なフェアリング破片",
+    "mass_kg": 75.0,
+    "position_m": [7378137.0, 0.0],
+    "velocity_m_s": [0.0, 7700.0],
+    "moment_of_inertia_kg_m2": 15.0,
+    "angle_deg": 0.0,
+    "angular_velocity_deg_s": 90.0,
+    "width_m": 3.0,
+    "height_m": 2.0,
+    "image_path": "assets/images/debris_shrapnel.png",
+    "draw_fixed_size_px": 30
+  },
+  {
+    "name": "OldEye-4",
+    "description": "沈黙した巨大な旧型気象衛星",
+    "mass_kg": 850.0,
+    "position_m": [-6758137.0, 0.0],
+    "velocity_m_s": [0.0, -7680.0],
+    "moment_of_inertia_kg_m2": 800.0,
+    "angle_deg": 0.0,
+    "angular_velocity_deg_s": 0.5,
+    "width_m": 4.33,
+    "height_m": 3.5,
+    "image_path": "assets/images/debris_oldeye.png",
+    "draw_fixed_size_px": 30
+  }
+]

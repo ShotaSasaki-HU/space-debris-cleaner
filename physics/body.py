@@ -15,6 +15,7 @@ class RigidBody:
         velocity: np.ndarray,
         moment_of_inertia: float = 1.0,
         angle: float = 0.0,
+        angular_velocity: float = 0.0,
         is_fixed: bool = False,
         image_path: str = None,
         real_width_du: float = 0.0,
@@ -43,7 +44,7 @@ class RigidBody:
 
         self.moment_of_inertia = moment_of_inertia
         self.angle = angle
-        self.angular_velocity = 0.0
+        self.angular_velocity = angular_velocity
         self.angular_acceleration = 0.0
         
         self.is_fixed: bool = is_fixed
@@ -59,7 +60,7 @@ class RigidBody:
         self.real_height_du = real_height_du
         self.draw_fixed_size_px = draw_fixed_size_px
 
-        self.collision_radius: float = min(real_width_du, real_height_du) / 2.0 # 衝突半径
+        self.collision_radius: float = (min(real_width_du, real_height_du) / 2.0) * 0.8 # 衝突半径
         self.crash_tolerance_cano: float = mass / 1e7 # 構造強度（自身の質量の1/N倍のエネルギーまで耐えられると仮定．SI単位系ならジュール．）
 
         # 結合物理用の拡張パラメータ
@@ -71,7 +72,7 @@ class RigidBody:
         self._original_inertia = moment_of_inertia      # オリジナル諸元の保存用
 
         # 燃料
-        self.max_propellant_mass = mass * 0.2
+        self.max_propellant_mass = mass * 0.5
         self.propellant_mass = self.max_propellant_mass
 
         exhaust_velocity_si = isp_sec * 9.80665 # Ispから実効排気速度（m/s）を計算（g0 = 9.80665 m/s^2）

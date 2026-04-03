@@ -14,6 +14,7 @@ from physics.constants import (
 from physics.control import PIDController
 from view.camera import Camera, RelativeCamera
 from view.renderer import GameRenderer
+from utils.loader import LevelLoader
 
 # アプリケーション全体の設定
 SCREEN_WIDTH = 1280
@@ -70,30 +71,8 @@ class SpaceDebrisApp:
         )
         self.engine.add_body(self.earth)
 
-        # 複数のデブリ
-        r_base = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
-        m_2nd_stage_cano = 3000 * KG_TO_MU # H-IIAロケット15号機の上段
-        i_2nd_stage_cano = 33250 * KG_TO_MU * (METER_TO_DU ** 2) # 円柱の中心軸に垂直な軸まわりの慣性モーメント
-        for i in range(3):
-            # デブリごとに位相を30度ずつ，高度を5kmずつずらす．
-            angle_offset = i * (np.pi / 6.0)
-            r_debri = r_base + (i * 5000 * METER_TO_DU)
-            v_debri = np.sqrt(G_CANONICAL * M_earth / r_debri)
-
-            pos = np.array([r_debri * np.cos(angle_offset), r_debri * np.sin(angle_offset)])
-            vel = np.array([-v_debri * np.sin(angle_offset), v_debri * np.cos(angle_offset)]) # 速度は位置ベクトルと直交する方向
-
-            debri = RigidBody(
-                mass=m_2nd_stage_cano,
-                position=pos,
-                velocity=vel,
-                moment_of_inertia=i_2nd_stage_cano,
-                angle=0.0,
-                image_path="assets/images/rocket_2nd_stage.png",
-                real_width_du=11.0 * METER_TO_DU,
-                real_height_du=4.0 * METER_TO_DU,
-                draw_fixed_size_px=30
-            )
+        debris_list = LevelLoader.load_debris_from_json("assets/debris_config.json")
+        for debri in debris_list:
             self.engine.add_body(debri)
         self.selected_body = self.engine.bodies[-1] # 初期ターゲットの設定（プレイヤー追加前に実施）
 
@@ -112,7 +91,7 @@ class SpaceDebrisApp:
             real_width_du=CLEANER_SAT_SIZE_METER[0] * METER_TO_DU,
             real_height_du=CLEANER_SAT_SIZE_METER[1] * METER_TO_DU,
             draw_fixed_size_px=30,
-            isp_sec = 220.0
+            isp_sec=220.0
         )
         self.engine.add_body(self.player_sat)
 
@@ -371,7 +350,7 @@ class SpaceDebrisApp:
         """画面の描画"""
         self.renderer.clear()
         self.renderer.draw_starry_sky(simulation_time=self.simulation_time)
-        self.renderer.draw_predictions(self.orbital_predictions, player=self.player_sat)
+        self.renderer.draw_predictions(self.orbital_predictions, player=self.player_sat, selected_body=self.selected_body)
         self.renderer.draw_bodies(bodies=self.engine.bodies, selected_body=self.selected_body)
         self.renderer.draw_ui(self.player_sat, self.selected_body, self.sas_enabled, self.throttle, self.player_torque,
                               self.mission_start_time, self.simulation_time, self.fast_forward_rate, self.capture_state, self.capture_progress)
