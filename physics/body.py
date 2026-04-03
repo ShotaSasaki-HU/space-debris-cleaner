@@ -46,6 +46,7 @@ class RigidBody:
 
         # 力のバッファ（毎フレームControllerからセットされ，物理エンジンが消費する．）
         self.applied_force = np.zeros(2, dtype=np.float64) # ワールド座標系での力
+        self.last_applied_force = np.zeros(2, dtype=np.float64) # Renderer用に直前のフレームで加えられた力を退避するバッファ
         self.applied_torque = 0.0 # トルク（回転力）
 
         # ビジュアル情報
@@ -112,6 +113,7 @@ class RigidBody:
         """
         毎フレームの物理計算終了後に，スラスターの推力をゼロにリセットする．
         """
+        self.last_applied_force = self.applied_force.copy()
         self.applied_force.fill(0.0)
         self.applied_torque = 0.0
     

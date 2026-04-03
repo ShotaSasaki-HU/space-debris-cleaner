@@ -8,7 +8,9 @@ from skyfield.data import hipparcos
 
 from physics.body import RigidBody
 from view.camera import Camera, RelativeCamera
-from physics.constants import METER_TO_DU, SEC_TO_TU, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL
+from physics.constants import (
+    METER_TO_DU, SEC_TO_TU, TU_TO_SEC, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL
+)
 
 COLOR_EARTH = (50, 150, 255)
 COLOR_PLAYER = (0, 255, 0)
@@ -200,36 +202,15 @@ class GameRenderer:
     def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float, player_torque: float,
                 mission_start_time: datetime, simulation_time: datetime, fast_forward_rate: float, capture_state: str, progress: float):
         """各種UIを描画する"""
-        self._draw_rel_nav_ui(player, target)
         self._draw_control_console(sas_enabled, throttle, player, player_torque)
         self._draw_time(mission_start_time, simulation_time, fast_forward_rate)
         self._draw_capture_ui(capture_state, progress)
-
-    def _draw_rel_nav_ui(self, player: RigidBody, target: RigidBody):
-        """相対ナビゲーションUI"""
-        rel_pos_du = target.position - player.position
-        rel_vel_du_tu = target.velocity - player.velocity
-        
-        dist_m = np.linalg.norm(rel_pos_du) / METER_TO_DU
-        rel_speed_m_s = (np.linalg.norm(rel_vel_du_tu) / METER_TO_DU) * SEC_TO_TU
-        
-        is_approaching = np.dot(rel_pos_du, rel_vel_du_tu) < 0
-        approach_sign = "-" if is_approaching else "+"
-
-        ui_lines = [
-            f"--- TARGET NAV DATA ---",
-            f"Relative Dist : {dist_m:,.1f} m",
-            f"Relative Vel  : {approach_sign}{rel_speed_m_s:.2f} m/s",
-        ]
-        
-        y_offset = self.screen.get_height() - 90
-        for i, line in enumerate(ui_lines):
-            color = (255, 150, 150) if "Vel" in line and is_approaching else COLOR_UI_TEXT
-            text_surf = self.font.render(line, True, color)
-            self.screen.blit(text_surf, (20, y_offset + i * 22))
+        self._draw_nav_data(player, target)
 
     def _draw_control_console(self, sas_enabled: bool, throttle: float, player: RigidBody, player_torque: float):
         """操作に関するテキスト表示"""
+
+        """
         # UIの一番上に現在のカメラモードを描画
         mode_text = "VIEW: " + ("EARTH" if isinstance(self.camera, Camera) else "TRACKING")
         self.screen.blit(self.font.render(mode_text, True, COLOR_UI_TEXT), (20, 20))
@@ -237,20 +218,17 @@ class GameRenderer:
         sas_text = "SAS: ON" if sas_enabled else "SAS: OFF"
         sas_color = (100, 255, 100) if sas_enabled else (200, 200, 200)
         self.screen.blit(self.font.render(sas_text, True, sas_color), (20, 40))
-        
-        help_color = (150, 150, 150)
-        self.screen.blit(self.font.render("W/S: Forward/Backward | A/D: Left/Right", True, help_color), (20, 60))
-        self.screen.blit(self.font.render("Q/E: Manual Rotation (SAS OFF) | R: Toggle SAS", True, help_color), (20, 80))
+        """
 
         # スロットル
         self._draw_bar_gauge(screen=self.screen, cx=self.screen.get_width() - 85, cy=self.screen.get_height() - 105, w=50, h=150,
                              angle=0.0, min_val=0.0, max_val=1.0, input_val=throttle, full_color=(255, 0, 0),
                              stack_labels=['Throttle', f'{throttle * 100:.0f}%'], is_gradation=True)
 
-        # --- スラスター動作状況ココカラ ---
-
         cx = 180
-        cy = self.screen.get_size()[1] // 2
+        cy = self.screen.get_height() - 160
+
+        # --- スラスター動作状況ココカラ ---
         
         # プレイヤー画像の描画（常に上向き）
         if player.image_path and player.image_path in self.image_cache:
@@ -266,9 +244,7 @@ class GameRenderer:
             self.screen.blit(hud_img, img_rect.topleft)
         else:
             # フォールバックの三角形
-            pygame.draw.polygon(self.screen, COLOR_PLAYER, [
-                (cx, cy - 30), (cx - 20, cy + 20), (cx + 20, cy + 20)
-            ])
+            pygame.draw.polygon(self.screen, COLOR_PLAYER, [(cx, cy - 30), (cx - 20, cy + 20), (cx + 20, cy + 20)])
 
         keys = pygame.key.get_pressed()
         
@@ -319,7 +295,7 @@ class GameRenderer:
             max_val=MAX_TORQUE_NM,
             input_val=val_ccw,
             full_color=(0, 255, 0),
-            labels=[],
+            center_labels=[],
             start_angle_rad=np.deg2rad(90),
             end_angle_rad=np.deg2rad(150),
             is_flipped_horizontally=False,
@@ -336,7 +312,7 @@ class GameRenderer:
             max_val=MAX_TORQUE_NM,
             input_val=val_cw,
             full_color=(0, 255, 0),
-            labels=[],
+            center_labels=[],
             start_angle_rad=np.deg2rad(90),
             end_angle_rad=np.deg2rad(150),
             is_flipped_horizontally=True,
@@ -356,6 +332,207 @@ class GameRenderer:
         ## --- トルク表示ココマデ ---
 
         # --- スラスター動作状況ココマデ ---
+
+    def _draw_nav_data(self, player: RigidBody, target: RigidBody) -> None:
+        """慣性計測装置の値および相対ナビゲーションを表示"""
+        cx = 180
+        cy = 100
+
+        box_w = 200
+
+        # --- 回転ココカラ ---
+
+        offset = 10
+
+        rotation_color = (100, 255, 100)
+        radius = (box_w / 4) * 0.9
+
+        ang_v_si = np.rad2deg(player.angular_velocity / TU_TO_SEC)
+        ang_v_si_ccw = max(0.0, ang_v_si)
+        ang_v_si_cw = max(0.0, -ang_v_si)
+        # 正の角速度（CCW）
+        self._draw_circular_gauge(
+            screen=self.screen,
+            cx=cx - (box_w / 4),
+            cy=cy - (box_w / 4) + offset,
+            radius=radius,
+            thickness=10,
+            min_val=0.0,
+            max_val=90,
+            input_val=ang_v_si_ccw,
+            full_color=rotation_color,
+            center_labels=[f"{ang_v_si:.1f}", "°/s"],
+            start_angle_rad=np.deg2rad(90),
+            end_angle_rad=np.deg2rad(210),
+            is_flipped_horizontally=False,
+            is_gradation=False
+        )
+        # 負の角速度（CW）
+        self._draw_circular_gauge(
+            screen=self.screen,
+            cx=cx - (box_w / 4),
+            cy=cy - (box_w / 4) + offset,
+            radius=radius,
+            thickness=10,
+            min_val=0.0,
+            max_val=90,
+            input_val=ang_v_si_cw,
+            full_color=rotation_color,
+            center_labels=[],
+            start_angle_rad=np.deg2rad(90),
+            end_angle_rad=np.deg2rad(210),
+            is_flipped_horizontally=True,
+            is_gradation=False
+        )
+
+        ang_acc_si = np.rad2deg(player.angular_acceleration / (TU_TO_SEC ** 2))
+        ang_acc_si_ccw = max(0.0, ang_acc_si)
+        ang_acc_si_cw = max(0.0, -ang_acc_si)
+        # 正の角加速度（CCW）
+        self._draw_circular_gauge(
+            screen=self.screen,
+            cx=cx + (box_w / 4),
+            cy=cy - (box_w / 4) + offset,
+            radius=radius,
+            thickness=10,
+            min_val=0.0,
+            max_val=3.0,
+            input_val=ang_acc_si_ccw,
+            full_color=(100, 255, 100),
+            center_labels=[f"{ang_acc_si:.2f}", "°/s^2"],
+            start_angle_rad=np.deg2rad(90),
+            end_angle_rad=np.deg2rad(210),
+            is_flipped_horizontally=False,
+            is_gradation=False
+        )
+        # 負の角加速度（CW）
+        self._draw_circular_gauge(
+            screen=self.screen,
+            cx=cx + (box_w / 4),
+            cy=cy - (box_w / 4) + offset,
+            radius=radius,
+            thickness=10,
+            min_val=0.0,
+            max_val=3.0,
+            input_val=ang_acc_si_cw,
+            full_color=(100, 255, 100),
+            center_labels=[],
+            start_angle_rad=np.deg2rad(90),
+            end_angle_rad=np.deg2rad(210),
+            is_flipped_horizontally=True,
+            is_gradation=False
+        )
+
+        # --- 回転ココマデ ---
+
+        # --- 並進の正方形グリッド（相対速度・IMUの加速度）ココカラ ---
+
+        max_value = 0.05 # 最大目盛り（速度と加速度で共通）
+        interval_value = 0.01 # 目盛り間隔
+
+        grid_w = box_w
+        half_grid_w = grid_w // 2
+        grid_interval = int(half_grid_w * (interval_value / max_value))
+
+        grid_color = (100, 100, 100)
+
+        grid_surf = pygame.Surface((grid_w, grid_w), pygame.SRCALPHA)
+
+        # 外枠
+        pygame.draw.circle(grid_surf, grid_color, (half_grid_w, half_grid_w), half_grid_w, 2)
+
+        # XY軸
+        pygame.draw.line(grid_surf, grid_color, (half_grid_w, 0), (half_grid_w, grid_w), 2)
+        pygame.draw.line(grid_surf, grid_color, (0, half_grid_w), (grid_w, half_grid_w), 2)
+
+        # ドッキング許容円
+        allowable_radius = 0.01 # 許容半径
+        allowable_radius_px = (allowable_radius / max_value) * half_grid_w
+        pygame.draw.circle(grid_surf, (0, 255, 255), (half_grid_w, half_grid_w), allowable_radius_px, 1)
+
+        # グリッド線
+        for offset in range(grid_interval, half_grid_w + 1, grid_interval):
+            theta = np.arccos(offset / half_grid_w)
+
+            # 縦線
+            for x in [half_grid_w - offset, half_grid_w + offset]:
+                y0 = half_grid_w - (half_grid_w * np.sin(theta))
+                y1 = half_grid_w + (half_grid_w * np.sin(theta))
+                pygame.draw.line(grid_surf, grid_color, (x, y0), (x, y1), 1)
+
+            # 横線
+            for y in [half_grid_w - offset, half_grid_w + offset]:
+                x0 = half_grid_w - (half_grid_w * np.sin(theta))
+                x1 = half_grid_w + (half_grid_w * np.sin(theta))
+                pygame.draw.line(grid_surf, grid_color, (x0, y), (x1, y), 1)
+
+        grid_rect = grid_surf.get_rect(center=(cx, int(cy + (grid_w / 2))))
+        self.screen.blit(grid_surf, grid_rect.topleft)
+
+        ## --- ドット描画ココカラ ---
+
+        orig_x_px = cx
+        orig_y_px = cy + half_grid_w
+
+        # プレイヤーの機体ローカル座標に回転変換するための値
+        cos_t = np.cos(player.angle)
+        sin_t = np.sin(player.angle)
+
+        if player != target:
+            # ターゲットのクリーナー衛星に対する相対速度ベクトル
+            rel_v_world_si = (target.velocity - player.velocity) * (SEC_TO_TU / METER_TO_DU)
+            
+            rel_v_x = rel_v_world_si[0] * cos_t + rel_v_world_si[1] * sin_t
+            rel_v_y = -rel_v_world_si[0] * sin_t + rel_v_world_si[1] * cos_t
+
+            # 相対速度マーカーの位置
+            rel_v_mag = np.hypot(rel_v_x, rel_v_y)
+            if rel_v_mag > max_value:
+                scale = max_value / rel_v_mag
+                rel_v_x *= scale
+                rel_v_y *= scale
+            rel_v_y_px = orig_y_px - int((rel_v_x / max_value) * half_grid_w)
+            rel_v_x_px = orig_x_px - int((rel_v_y / max_value) * half_grid_w)
+
+            pygame.draw.line(self.screen, (255, 255, 0), (orig_x_px, orig_y_px), (rel_v_x_px, rel_v_y_px), 2)
+            if rel_v_mag <= max_value:
+                pygame.draw.circle(self.screen, (255, 255, 0), (rel_v_x_px, rel_v_y_px), 7)
+
+        # スラスターによる加速度（宇宙機のIMUは重力加速度を感じない．）
+        if player.mass > 0: # 0除算回避
+            acc_world_si = (player.last_applied_force / player.mass) * (SEC_TO_TU**2 / METER_TO_DU)
+        else:
+            acc_world_si = np.array([0.0, 0.0])
+            
+        acc_x = acc_world_si[0] * cos_t + acc_world_si[1] * sin_t
+        acc_y = -acc_world_si[0] * sin_t + acc_world_si[1] * cos_t
+
+        # 加速度マーカーの位置
+        acc_mag = np.hypot(acc_x, acc_y)
+        if acc_mag > max_value:
+            scale = max_value / acc_mag
+            acc_x *= scale
+            acc_y *= scale
+        acc_y_px = orig_y_px - int((acc_x / max_value) * half_grid_w)
+        acc_x_px = orig_x_px - int((acc_y / max_value) * half_grid_w)
+
+        pygame.draw.line(self.screen, (255, 0, 0), (orig_x_px, orig_y_px), (acc_x_px, acc_y_px), 2)
+        if acc_mag <= max_value:
+            pygame.draw.circle(self.screen, (255, 0, 0), (acc_x_px, acc_y_px), 5)
+
+        ## --- ドット描画ココマデ ---
+
+        for angle, sign in zip(np.arange(0, -np.pi * 2, -np.pi / 2), ['-', '', '', '-']):
+            text_surf = self.font.render(f"{sign}{max_value:.2f} m/s", True, COLOR_UI_TEXT)
+            text_rect = text_surf.get_rect(center=(
+                cx + (half_grid_w * np.cos(angle)),
+                cy + half_grid_w + (half_grid_w * np.sin(angle))
+            ))
+            self.screen.blit(text_surf, text_rect.topleft)
+
+        # --- 並進の正方形グリッド（相対速度・IMUの加速度）ココマデ ---
+
+        return
 
     def _draw_bar_gauge(self, screen: pygame.Surface, cx: int, cy: int, w: int, h: int, angle: float, min_val: float,
                         max_val: float, input_val: float, full_color: tuple, stack_labels: list[str], is_gradation: bool):
@@ -508,7 +685,7 @@ class GameRenderer:
             pygame.draw.aalines(screen, color, True, points) # アンチエイリアスあり
     
     def _draw_circular_gauge(self, screen: pygame.Surface, cx: int, cy: int, radius: int, thickness: int,
-                             min_val: float, max_val: float, input_val: float, full_color: tuple, labels: list[str],
+                             min_val: float, max_val: float, input_val: float, full_color: tuple, center_labels: list[str],
                              start_angle_rad: float, end_angle_rad: float, is_flipped_horizontally: bool, is_gradation: bool):
         """
         扇形ゲージコンポーネント
@@ -523,7 +700,7 @@ class GameRenderer:
             max_val (float): 最大値
             input_val (float): 入力値
             full_color (tuple): inputが最大の時の色
-            labels (list[str]): 中心に表示するテキスト
+            center_labels (list[str]): 中心に表示するテキスト
             start_angle_rad (float): 描画開始角度（ラジアン，画面右を0とし反時計回り）
             end_angle_rad (float): 描画終了角度（ラジアン）
             is_flipped_horizontally (bool): 左右反転フラグ
@@ -546,13 +723,13 @@ class GameRenderer:
 
         # --- ラベルココカラ ---
 
-        if not labels: return
+        if not center_labels: return
 
-        label_surfs = [self.font.render(label, True, COLOR_UI_TEXT) for label in labels] # 各ラベルに対するサーフェス
+        label_surfs = [self.font.render(label, True, COLOR_UI_TEXT) for label in center_labels] # 各ラベルに対するサーフェス
 
         # ラベル群全体のバウンディングボックス寸法
         spacing = 2
-        total_text_h = sum([surf.get_size()[1] for surf in label_surfs]) + (spacing * (len(labels) - 1))
+        total_text_h = sum([surf.get_size()[1] for surf in label_surfs]) + (spacing * (len(center_labels) - 1))
 
         # 各ラベルの中心位置を計算して配置
         total_text_y_top = cy - (total_text_h / 2)
@@ -576,6 +753,7 @@ class GameRenderer:
         self.star_mags = bright_df['magnitude'].values
 
         self.ts = load.timescale()
+        self.star_color_tint = (0.7, 0.85, 1.0) # 星空の色温度（Tint）設定
     
     def draw_starry_sky(self, simulation_time: datetime):
         """背景の星空を描画する"""
@@ -632,13 +810,21 @@ class GameRenderer:
         visible_x = x_coords[visible_mask]
         visible_y = y_coords[visible_mask]
         visible_mags = self.star_mags[visible_mask]
-        
+
         # 描画
+        tint_r, tint_g, tint_b = self.star_color_tint
         for x, y, mag in zip(visible_x, visible_y, visible_mags):
             # 等級が小さいほど明るく，大きな円で描く．
             size = max(1, int((6.0 - mag) * 0.7))
+            
+            # ベースとなる輝度（グレースケール）
             brightness = max(50, min(255, int(255 - (mag - 1.0) * 40)))
-            color = (brightness, brightness, brightness)
+            
+            color = (
+                int(brightness * tint_r), # 赤成分を減らす
+                int(brightness * tint_g), # 緑成分を少し減らす
+                int(brightness * tint_b)  # 青成分はそのまま（最大値）
+            )
             
             pygame.draw.circle(self.screen, color, (int(x), int(y)), size)
     
