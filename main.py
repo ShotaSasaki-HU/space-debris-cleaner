@@ -111,7 +111,8 @@ class SpaceDebrisApp:
             image_path="assets/images/player_sat.png",
             real_width_du=CLEANER_SAT_SIZE_METER[0] * METER_TO_DU,
             real_height_du=CLEANER_SAT_SIZE_METER[1] * METER_TO_DU,
-            draw_fixed_size_px=30
+            draw_fixed_size_px=30,
+            isp_sec = 220.0
         )
         self.engine.add_body(self.player_sat)
 
@@ -229,13 +230,13 @@ class SpaceDebrisApp:
         if keys[pygame.K_a]: thrust_y += thrust_mag
         if keys[pygame.K_d]: thrust_y -= thrust_mag
 
-        if thrust_x != 0 or thrust_y != 0:
+        if (thrust_x != 0 or thrust_y != 0):
             # DOCKED状態（重心がズレている）なら、オフセット位置から推力を加える
             if hasattr(self.player_sat, 'visual_offset_local') and np.any(self.player_sat.visual_offset_local):
                 ox, oy = self.player_sat.visual_offset_local
-                self.player_sat.apply_local_force_at_offset(thrust_x, thrust_y, ox, oy)
+                self.player_sat.apply_local_force_at_offset(thrust_x, thrust_y, ox, oy, dt_tu)
             else:
-                self.player_sat.apply_local_force(thrust_x, thrust_y)
+                self.player_sat.apply_local_force(thrust_x, thrust_y, dt_tu)
         
         # 回転制御
         self.player_torque = 0.0

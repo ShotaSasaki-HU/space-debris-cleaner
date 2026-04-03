@@ -9,7 +9,7 @@ from skyfield.data import hipparcos
 from physics.body import RigidBody
 from view.camera import Camera, RelativeCamera
 from physics.constants import (
-    METER_TO_DU, SEC_TO_TU, TU_TO_SEC, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL
+    METER_TO_DU, SEC_TO_TU, TU_TO_SEC, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL, KG_TO_MU
 )
 
 COLOR_EARTH = (50, 150, 255)
@@ -206,6 +206,7 @@ class GameRenderer:
         self._draw_time(mission_start_time, simulation_time, fast_forward_rate)
         self._draw_capture_ui(capture_state, progress)
         self._draw_nav_data(player, target)
+        self._draw_fuel_gage(player)
 
     def _draw_control_console(self, sas_enabled: bool, throttle: float, player: RigidBody, player_torque: float):
         """操作に関するテキスト表示"""
@@ -254,10 +255,10 @@ class GameRenderer:
         offset = 60 # 画像中心からの距離
 
         # 噴射時はスロットル値に比例，非噴射時は0．
-        val_w = throttle if keys[pygame.K_w] else 0.0
-        val_s = throttle if keys[pygame.K_s] else 0.0
-        val_a = throttle if keys[pygame.K_a] else 0.0
-        val_d = throttle if keys[pygame.K_d] else 0.0
+        val_w = throttle if (keys[pygame.K_w] and player.propellant_mass > 0) else 0.0
+        val_s = throttle if (keys[pygame.K_s] and player.propellant_mass > 0) else 0.0
+        val_a = throttle if (keys[pygame.K_a] and player.propellant_mass > 0) else 0.0
+        val_d = throttle if (keys[pygame.K_d] and player.propellant_mass > 0) else 0.0
 
         for theta, val_i in zip(np.arange(0, -2 * np.pi, -np.pi / 2), [val_a, val_s, val_d, val_w]):
             self._draw_bar_gauge(
@@ -866,3 +867,29 @@ class GameRenderer:
             stack_labels=[f"{int(progress * 100)}%"],
             is_gradation=False
         )
+    
+    def _draw_fuel_gage(self, player: RigidBody):
+        """燃料ゲージの描画"""
+        screen_w = self.screen.get_width()
+
+        offset = 100
+        radius = 70
+
+        self._draw_circular_gauge(
+            screen=self.screen,
+            cx=screen_w - offset,
+            cy=offset,
+            radius=radius,
+            thickness=10,
+            min_val=0.0,
+            max_val=player.max_propellant_mass,
+            input_val=player.propellant_mass,
+            full_color=(100, 150, 255),
+            center_labels=[f"{player.propellant_mass / KG_TO_MU:.1f} kg", 'Fuel'],
+            start_angle_rad=np.deg2rad(-30),
+            end_angle_rad=np.deg2rad(210),
+            is_flipped_horizontally=True,
+            is_gradation=False
+        )
+
+        return

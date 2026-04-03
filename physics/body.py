@@ -1,6 +1,8 @@
 # physics/body.py
 import numpy as np
 
+from physics.constants import METER_TO_DU, SEC_TO_TU
+
 class RigidBody:
     """
     宇宙空間に存在する剛体（地球，デブリ，衛星など）のデータモデル．
@@ -17,7 +19,8 @@ class RigidBody:
         image_path: str = None,
         real_width_du: float = 0.0,
         real_height_du: float = 0.0,
-        draw_fixed_size_px: int = None
+        draw_fixed_size_px: int = None,
+        isp_sec: float = 220.0
     ):
         """
         Args:
@@ -31,6 +34,7 @@ class RigidBody:
             real_width_du (float): DUベースの実寸法（幅）
             real_height_du (float): DUベースの実寸法（高さ）
             draw_fixed_size_px (int): マクロ視点での一定サイズ(ピクセル)
+            isp_sec (float): エンジンの比推力（秒）
         """
         self.mass: float = mass
         self.position: np.ndarray = np.array(position, dtype=np.float64) # float64型を明示し，計算精度を確保．
@@ -66,7 +70,19 @@ class RigidBody:
         self._original_mass = mass                      # オリジナル諸元の保存用
         self._original_inertia = moment_of_inertia      # オリジナル諸元の保存用
 
-    def apply_local_force(self, force_local_x: float, force_local_y: float) -> None:
+        # 燃料
+        self.max_propellant_mass = mass * 0.2
+        self.propellant_mass = self.max_propellant_mass
+
+        exhaust_velocity_si = isp_sec * 9.80665 # Ispから実効排気速度（m/s）を計算（g0 = 9.80665 m/s^2）
+        exhaust_velocity_cano = exhaust_velocity_si * (METER_TO_DU / SEC_TO_TU) # 実効排気速度をカノニカル単位系（DU/TU）に変換
+        # 消費係数は排気速度の逆数（1 / v_e）
+        if exhaust_velocity_cano > 0:
+            self.fuel_consumption_rate = 1.0 / exhaust_velocity_cano
+        else:
+            self.fuel_consumption_rate = 0.0
+
+    def apply_local_force(self, force_local_x: float, force_local_y: float, dt: float) -> None:
         """
         機体のローカル座標系で推力を加える．（W/S, A/Dキー用）
         Args:
@@ -75,6 +91,12 @@ class RigidBody:
         """
         if self.is_fixed or self.mass <= 0:
             return
+        
+        force_mag = np.hypot(force_local_x, force_local_y)
+        if force_mag > 0:
+            # 燃料を消費．足りなければ推力は発生しない．
+            if not self.consume_fuel(force_mag, dt):
+                return
 
         # 回転行列を用いてローカル推力をワールド推力に変換
         cos_theta = np.cos(self.angle)
@@ -85,8 +107,15 @@ class RigidBody:
         
         self.applied_force += np.array([world_force_x, world_force_y])
     
-    def apply_local_force_at_offset(self, force_local_x: float, force_local_y: float, offset_x_local: float, offset_y_local: float):
+    def apply_local_force_at_offset(self, force_local_x: float, force_local_y: float,
+                                    offset_x_local: float, offset_y_local: float, dt: float):
         """重心からズレた位置にローカル座標系の力を加える．（トルクも発生）"""
+        force_mag = np.hypot(force_local_x, force_local_y)
+        if force_mag > 0:
+            # 燃料を消費．足りなければ推力は発生しない．
+            if not self.consume_fuel(force_mag, dt):
+                return
+
         cos_t = np.cos(self.angle)
         sin_t = np.sin(self.angle)
 
@@ -101,6 +130,27 @@ class RigidBody:
         
         # トルクの発生（外積: r × F）
         self.applied_torque += (r_world_x * fy_world - r_world_y * fx_world)
+    
+    def consume_fuel(self, force_mag: float, dt: float) -> bool:
+        """
+        指定された推力と時間に基づいて燃料を消費する．
+        Returns:
+            (bool): 燃料が足りていればTrue，空ならFalse．
+        """
+        if self.propellant_mass <= 0:
+            return False
+            
+        # 消費量 = 推力の大きさ * 消費係数 * 時間
+        dm = force_mag * self.fuel_consumption_rate * dt
+        
+        self.propellant_mass -= dm
+        self.mass -= dm
+        
+        if self.propellant_mass <= 0:
+            self.propellant_mass = 0.0
+            return False
+            
+        return True
 
     def apply_torque(self, torque: float) -> None:
         """
