@@ -498,14 +498,34 @@ class GameRenderer:
             if rel_v_mag <= max_value:
                 pygame.draw.circle(self.screen, (255, 255, 0), (rel_v_x_px, rel_v_y_px), 7)
 
-        # スラスターによる加速度（宇宙機のIMUは重力加速度を感じない．）
-        if player.mass > 0: # 0除算回避
-            acc_world_si = (player.last_applied_force / player.mass) * (SEC_TO_TU**2 / METER_TO_DU)
-        else:
-            acc_world_si = np.array([0.0, 0.0])
+        # クリーナー衛星のIMUが計測する加速度
+        if player.mass > 0:
+            # 1. 重心の並進加速度 (ワールド)
+            acc_com_world = (player.last_applied_force / player.mass) * (SEC_TO_TU**2 / METER_TO_DU)
             
-        acc_x = acc_world_si[0] * cos_t + acc_world_si[1] * sin_t
-        acc_y = -acc_world_si[0] * sin_t + acc_world_si[1] * cos_t
+            # 2. ローカル座標への変換
+            acc_com_x = acc_com_world[0] * cos_t + acc_com_world[1] * sin_t
+            acc_com_y = -acc_com_world[0] * sin_t + acc_com_world[1] * cos_t
+            
+            # 3. IMUの位置（ローカルでの重心からのオフセット）
+            r_x = player.visual_offset_local[0] / METER_TO_DU
+            r_y = player.visual_offset_local[1] / METER_TO_DU
+            
+            # 4. 接線加速度 (a_tan = α × r)
+            alpha_si = player.angular_acceleration / (TU_TO_SEC**2)
+            a_tan_x = -alpha_si * r_y
+            a_tan_y = alpha_si * r_x
+            
+            # 5. 向心加速度 (a_cen = -ω^2 * r)
+            omega_si = player.angular_velocity / TU_TO_SEC
+            a_cen_x = -(omega_si**2) * r_x
+            a_cen_y = -(omega_si**2) * r_y
+            
+            # 全てを合成して初めて「IMUセンサーの生値」になる
+            acc_x = acc_com_x + a_tan_x + a_cen_x
+            acc_y = acc_com_y + a_tan_y + a_cen_y
+        else:
+            acc_x, acc_y = 0.0, 0.0
 
         # 加速度マーカーの位置
         acc_mag = np.hypot(acc_x, acc_y)
