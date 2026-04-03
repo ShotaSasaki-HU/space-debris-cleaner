@@ -200,5 +200,66 @@ class RigidBody:
         self.docked_body = None
         return other
     
+    def get_velo_from_imu(self) -> np.ndarray:
+        """
+        IMUセンサーが搭載されている位置（元の重心）における，機体ローカル座標系（前後・左右）の速度ベクトルを計算する．
+        """
+        # 1. 重心の並進速度（ワールド）をローカル座標に変換
+        cos_t = np.cos(self.angle)
+        sin_t = np.sin(self.angle)
+        v_com_local_x = self.velocity[0] * cos_t + self.velocity[1] * sin_t
+        v_com_local_y = -self.velocity[0] * sin_t + self.velocity[1] * cos_t
+        
+        # 2. IMUの位置（ローカルでの重心からのオフセット）
+        r_x = self.visual_offset_local[0]
+        r_y = self.visual_offset_local[1]
+        
+        # 3. 自転による接線速度（v_tan = ω × r）をローカル座標系で直接計算
+        # （角速度 ω が正のとき，+X軸上の点は+Y方向へ，+Y軸上の点は-X方向へ動く．）
+        omega = self.angular_velocity
+        v_tan_local_x = -omega * r_y
+        v_tan_local_y = omega * r_x
+        
+        # 4. 重心速度と接線速度を合成して，IMU位置の純粋なローカル速度とする．
+        v_imu_local_x = v_com_local_x + v_tan_local_x
+        v_imu_local_y = v_com_local_y + v_tan_local_y
+        
+        return np.array([v_imu_local_x, v_imu_local_y])
+    
+    def get_acc_from_imu(self) -> np.array:
+        if self.mass > 0:
+            # 1. 重心の並進加速度 (ワールド)
+            acc_com_world = self.last_applied_force / self.mass
+            
+            # 2. ローカル座標への変換
+            cos_t = np.cos(self.angle)
+            sin_t = np.sin(self.angle)
+            acc_com_x = acc_com_world[0] * cos_t + acc_com_world[1] * sin_t
+            acc_com_y = -acc_com_world[0] * sin_t + acc_com_world[1] * cos_t
+            
+            # 3. IMUの位置（ローカルでの重心からのオフセット）
+            r_x = self.visual_offset_local[0]
+            r_y = self.visual_offset_local[1]
+            
+            # 4. 接線加速度 (a_tan = α × r)
+            alpha_si = self.angular_acceleration
+            a_tan_x = -alpha_si * r_y
+            a_tan_y = alpha_si * r_x
+            
+            # 5. 向心加速度 (a_cen = -ω^2 * r)
+            omega_si = self.angular_velocity
+            a_cen_x = -(omega_si**2) * r_x
+            a_cen_y = -(omega_si**2) * r_y
+            
+            # 全てを合成して初めて「IMUセンサーの生値」になる．
+            acc_x = acc_com_x + a_tan_x + a_cen_x
+            acc_y = acc_com_y + a_tan_y + a_cen_y
+
+            return np.array([acc_x, acc_y])
+        else:
+            return np.array([0.0, 0.0])
+    
     def get_position(self) -> np.ndarray: return self.position
     def get_collision_radius(self) -> float: return self.collision_radius
+    def get_angular_velocity(self) -> float: return self.angular_velocity
+    def get_angular_acceleration(self) -> float: return self.angular_acceleration
