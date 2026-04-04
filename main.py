@@ -289,13 +289,13 @@ class SpaceDebrisApp:
 
         # 水平なターゲットのpositionからアーム先端への相対位置ベクトル（px）
         local_x_px = (local_x_du / self.selected_body.real_width_du) * debri_w_px
-        local_y_px = (local_y_du / self.selected_body.real_height_du) * debri_h_px
+        local_y_px = (-local_y_du / self.selected_body.real_height_du) * debri_h_px
 
         # ターゲット画像の左上(0, 0)からアーム先端への位置ベクトルへ変換
         local_x_px = int(local_x_px + (debri_w_px / 2))
         local_y_px = int(local_y_px + (debri_h_px / 2))
 
-        mask = pygame.mask.from_surface(image)
+        mask = pygame.mask.from_surface(image, threshold=127)
         # アームの先端が「デブリ画像の範囲内」かつ「マスクが不透明」なら接触
         if (0 <= local_x_px < debri_w_px) and (0 <= local_y_px < debri_h_px):
             return mask.get_at((local_x_px, local_y_px)) != 0
