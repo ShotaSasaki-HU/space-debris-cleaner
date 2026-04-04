@@ -15,6 +15,7 @@ from physics.control import PIDController
 from view.camera import Camera, RelativeCamera
 from view.renderer import GameRenderer
 from utils.loader import LevelLoader
+from utils.audio import ThrusterAudioManager
 
 # アプリケーション全体の設定
 SCREEN_WIDTH = 1280
@@ -48,6 +49,11 @@ class SpaceDebrisApp:
         self.capture_state = 'IDLE' # 'IDLE', 'CAPTURING', 'DOCKED'
         self.capture_progress = 0.0 # 捕獲の進捗（0.0〜1.0）
         self.capture_time_required_sec = 10.0 # 捕獲完了に必要な継続接触時間（秒）
+
+        self.thruster_audio = ThrusterAudioManager(
+            loop_wav_path="assets/sounds/RcsHeavy.wav",
+            shutoff_wav_path="assets/sounds/RcsHeavyShutoff.wav"
+        )
 
         self._setup_physics()
         self._setup_view()
@@ -204,13 +210,19 @@ class SpaceDebrisApp:
         # 並進スラスター
         thrust_mag = self.max_thrust_cano * self.throttle
         thrust_x, thrust_y = 0.0, 0.0
+        has_fuel = self.player_sat.propellant_mass > 0 # オーディオ更新用のフラグ
         if keys[pygame.K_w]: thrust_x += thrust_mag
         if keys[pygame.K_s]: thrust_x -= thrust_mag
         if keys[pygame.K_a]: thrust_y += thrust_mag
         if keys[pygame.K_d]: thrust_y -= thrust_mag
+        
+        self.thruster_audio.update_thruster(thruster_id="K_w", is_firing=keys[pygame.K_w] and has_fuel)
+        self.thruster_audio.update_thruster(thruster_id="K_s", is_firing=keys[pygame.K_s] and has_fuel)
+        self.thruster_audio.update_thruster(thruster_id="K_a", is_firing=keys[pygame.K_a] and has_fuel)
+        self.thruster_audio.update_thruster(thruster_id="K_d", is_firing=keys[pygame.K_d] and has_fuel)
 
         if (thrust_x != 0 or thrust_y != 0):
-            # DOCKED状態（重心がズレている）なら、オフセット位置から推力を加える
+            # DOCKED状態（重心がズレている）なら，オフセット位置から推力を加える．
             if hasattr(self.player_sat, 'visual_offset_local') and np.any(self.player_sat.visual_offset_local):
                 ox, oy = self.player_sat.visual_offset_local
                 self.player_sat.apply_local_force_at_offset(thrust_x, thrust_y, ox, oy, dt_tu)
