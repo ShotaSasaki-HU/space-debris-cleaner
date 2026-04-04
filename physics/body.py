@@ -87,7 +87,7 @@ class RigidBody:
         else:
             self.fuel_consumption_rate = 0.0
 
-    def apply_local_force(self, force_local_x: float, force_local_y: float, dt: float) -> None:
+    def apply_local_force(self, force_local_x: float, force_local_y: float, total_force_mag: float, dt: float) -> None:
         """
         機体のローカル座標系で推力を加える．（W/S, A/Dキー用）
         Args:
@@ -97,10 +97,9 @@ class RigidBody:
         if self.is_fixed or self.mass <= 0:
             return
         
-        force_mag = np.hypot(force_local_x, force_local_y)
-        if force_mag > 0:
+        if total_force_mag > 0:
             # 燃料を消費．足りなければ推力は発生しない．
-            if not self.consume_fuel(force_mag, dt):
+            if not self.consume_fuel(total_force_mag, dt):
                 return
 
         # 回転行列を用いてローカル推力をワールド推力に変換
@@ -113,12 +112,11 @@ class RigidBody:
         self.applied_force += np.array([world_force_x, world_force_y])
     
     def apply_local_force_at_offset(self, force_local_x: float, force_local_y: float,
-                                    offset_x_local: float, offset_y_local: float, dt: float):
+                                    offset_x_local: float, offset_y_local: float, total_force_mag: float, dt: float):
         """重心からズレた位置にローカル座標系の力を加える．（トルクも発生）"""
-        force_mag = np.hypot(force_local_x, force_local_y)
-        if force_mag > 0:
+        if total_force_mag > 0:
             # 燃料を消費．足りなければ推力は発生しない．
-            if not self.consume_fuel(force_mag, dt):
+            if not self.consume_fuel(total_force_mag, dt):
                 return
 
         cos_t = np.cos(self.angle)

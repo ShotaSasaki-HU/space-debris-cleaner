@@ -210,24 +210,34 @@ class SpaceDebrisApp:
         # 並進スラスター
         thrust_mag = self.max_thrust_cano * self.throttle
         thrust_x, thrust_y = 0.0, 0.0
-        has_fuel = self.player_sat.propellant_mass > 0 # オーディオ更新用のフラグ
-        if keys[pygame.K_w]: thrust_x += thrust_mag
-        if keys[pygame.K_s]: thrust_x -= thrust_mag
-        if keys[pygame.K_a]: thrust_y += thrust_mag
-        if keys[pygame.K_d]: thrust_y -= thrust_mag
-        
+        total_thrust = 0.0 # 消費した推力の絶対値の合計
+        if keys[pygame.K_w]: 
+            thrust_x += thrust_mag
+            total_thrust += thrust_mag
+        if keys[pygame.K_s]: 
+            thrust_x -= thrust_mag
+            total_thrust += thrust_mag
+        if keys[pygame.K_a]: 
+            thrust_y += thrust_mag
+            total_thrust += thrust_mag
+        if keys[pygame.K_d]: 
+            thrust_y -= thrust_mag
+            total_thrust += thrust_mag
+
+        # オーディオ更新
+        has_fuel = self.player_sat.propellant_mass > 0
         self.thruster_audio.update_thruster(thruster_id="K_w", is_firing=keys[pygame.K_w] and has_fuel)
         self.thruster_audio.update_thruster(thruster_id="K_s", is_firing=keys[pygame.K_s] and has_fuel)
         self.thruster_audio.update_thruster(thruster_id="K_a", is_firing=keys[pygame.K_a] and has_fuel)
         self.thruster_audio.update_thruster(thruster_id="K_d", is_firing=keys[pygame.K_d] and has_fuel)
 
-        if (thrust_x != 0 or thrust_y != 0):
+        if total_thrust > 0: # 合力が0でも，スラスターが動作していれば処理を呼ぶ．
             # DOCKED状態（重心がズレている）なら，オフセット位置から推力を加える．
             if hasattr(self.player_sat, 'visual_offset_local') and np.any(self.player_sat.visual_offset_local):
                 ox, oy = self.player_sat.visual_offset_local
-                self.player_sat.apply_local_force_at_offset(thrust_x, thrust_y, ox, oy, dt_tu)
+                self.player_sat.apply_local_force_at_offset(thrust_x, thrust_y, ox, oy, total_thrust, dt_tu)
             else:
-                self.player_sat.apply_local_force(thrust_x, thrust_y, dt_tu)
+                self.player_sat.apply_local_force(thrust_x, thrust_y, total_thrust, dt_tu)
         
         # 回転制御
         self.player_torque = 0.0
