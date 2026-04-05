@@ -18,8 +18,8 @@ from utils.loader import LevelLoader
 from utils.audio import ThrusterAudioManager
 
 # アプリケーション全体の設定
-SCREEN_WIDTH = 1280
-SCREEN_HEIGHT = 720
+SCREEN_WIDTH_INIT = 1280
+SCREEN_HEIGHT_INIT = 720
 FPS = 60
 PIXELS_PER_DU = 200.0
 TIME_STEP_TU_PHYSICS = (1 / FPS) * SEC_TO_TU # 物理エンジンの微小ステップ幅
@@ -31,7 +31,7 @@ class SpaceDebrisApp:
     """
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), pygame.RESIZABLE)
         pygame.display.set_caption("Space Debris Cleaner")
         self.clock = pygame.time.Clock()
         self.running = True
@@ -108,9 +108,9 @@ class SpaceDebrisApp:
 
     def _setup_view(self):
         """描画関連の初期化"""
-        self.earth_camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU)
+        self.earth_camera = Camera(self.screen, PIXELS_PER_DU)
 
-        self.tracking_camera = RelativeCamera(SCREEN_WIDTH, SCREEN_HEIGHT, PIXELS_PER_DU)
+        self.tracking_camera = RelativeCamera(self.screen, PIXELS_PER_DU)
         self.tracking_camera.set_target_body(self.selected_body)
 
         self.view_mode = "EARTH"
@@ -126,6 +126,19 @@ class SpaceDebrisApp:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+            
+            # ウィンドウリサイズ
+            elif event.type == pygame.VIDEORESIZE:                
+                # 新しいサイズのSurfaceを再生成
+                self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+                
+                # 古いSurfaceの参照を，新しいSurfaceで上書きする．
+                if hasattr(self, 'renderer'):
+                    self.renderer.screen = self.screen
+                if hasattr(self, 'earth_camera'):
+                    self.earth_camera.update_screen_size(self.screen)
+                if hasattr(self, 'tracking_camera'):
+                    self.tracking_camera.update_screen_size(self.screen)
             
             # --- マウスクリックによるターゲット選択ココカラ ---
 
@@ -156,6 +169,7 @@ class SpaceDebrisApp:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:
                     self.sas_enabled = not self.sas_enabled
+
                 # カメラの3段階切り替えロジック
                 elif event.key == pygame.K_RSHIFT:
                     if self.view_mode == "EARTH":
@@ -164,11 +178,13 @@ class SpaceDebrisApp:
                     else:
                         self.view_mode = "EARTH"
                         self.renderer.camera = self.earth_camera
+
                 # 早送り係数の操作
                 elif event.key == pygame.K_PERIOD:
                     self.fast_forward_rate = min(1000.0, self.fast_forward_rate * 10.0)
                 elif event.key == pygame.K_COMMA:
                     self.fast_forward_rate = max(1.0, self.fast_forward_rate / 10.0)
+
                 # 捕獲・リリース操作
                 elif event.key == pygame.K_RETURN:
                     if self.capture_state in ['CAPTURING', 'DOCKED']:
@@ -182,7 +198,7 @@ class SpaceDebrisApp:
                 
                 if type(self.renderer.camera) is Camera:
                     if event.key == pygame.K_RIGHT:
-                        max_pixels_per_du = min(SCREEN_WIDTH, SCREEN_HEIGHT) / (1.3 * 2.0) # 地球の直径 = 2DU
+                        max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / (1.3 * 2.0) # 地球の直径 = 2DU
                         self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
                     elif event.key == pygame.K_LEFT:
                         self.renderer.camera.set_pixels_per_du(max(30, self.renderer.camera.get_pixels_per_du() // 2))
@@ -190,7 +206,7 @@ class SpaceDebrisApp:
                     if event.key == pygame.K_RIGHT:
                         target_body = self.renderer.camera.get_target_body()
                         required_du = 1.2 * np.linalg.norm([target_body.real_width_du, target_body.real_height_du])
-                        max_pixels_per_du = min(SCREEN_WIDTH, SCREEN_HEIGHT) / required_du
+                        max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / required_du
                         self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
                     elif event.key == pygame.K_LEFT:
                         self.renderer.camera.set_pixels_per_du(max(PIXELS_PER_DU, self.renderer.camera.get_pixels_per_du() // 2))

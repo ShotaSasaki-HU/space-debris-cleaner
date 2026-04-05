@@ -35,6 +35,10 @@ class GameRenderer:
     def clear(self, bg_color: tuple = (10, 10, 20)):
         """画面をクリアする"""
         self.screen.fill(bg_color)
+
+        # メイン画面と予測線レイヤーのサイズが不一致なら再生成（リサイズに追従）
+        if self.prediction_surface.get_size() != self.screen.get_size():
+            self.prediction_surface = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
         self.prediction_surface.fill((0, 0, 0, 0))
 
     def draw_predictions(self, predictions_dict: dict, player: RigidBody, selected_body: RigidBody):

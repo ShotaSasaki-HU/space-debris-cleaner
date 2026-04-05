@@ -2,26 +2,27 @@
 import numpy as np
 from typing import Tuple
 from physics.body import RigidBody
+import pygame
 
 class Camera:
     """
     物理空間（カノニカル単位系）と画面空間（ピクセル）の座標変換を行うクラス．
     MVCアーキテクチャにおけるViewの基盤．
     """
-    def __init__(self, screen_width: int, screen_height: int, pixels_per_du: float):
+    def __init__(self, screen: pygame.Surface, pixels_per_du: float):
         """
         Args:
             screen_width (int): 画面の幅（ピクセル）
             screen_height (int): 画面の高さ（ピクセル）
             pixels_per_du (float): 1 DU（地球半径）を画面上で何ピクセルとして描画するか．（ズーム倍率）
         """
-        self.screen_width = screen_width
-        self.screen_height = screen_height
+        self.screen_width = screen.get_width()
+        self.screen_height = screen.get_height()
         self.pixels_per_du = pixels_per_du
         
         # 画面の中心座標（ここを物理空間の原点とする．）
-        self.center_x = screen_width // 2
-        self.center_y = screen_height // 2
+        self.center_x = self.screen_width // 2
+        self.center_y = self.screen_height // 2
 
     def world_to_screen(self, world_pos: np.ndarray) -> Tuple[int, int]:
         """
@@ -33,6 +34,16 @@ class Camera:
         
         return (screen_x, screen_y)
     
+    def update_screen_size(self, screen: pygame.Surface) -> None:
+        """
+        ウィンドウサイズが変更された際に呼ばれ，内部の画面サイズと中心座標を再計算する．
+        """
+        self.screen_width = screen.get_width()
+        self.screen_height = screen.get_height()
+        
+        self.center_x = self.screen_width // 2
+        self.center_y = self.screen_height // 2
+    
     def set_pixels_per_du(self, pixels_per_du: float) -> None: self.pixels_per_du = pixels_per_du
 
     def get_pixels_per_du(self) -> float: return self.pixels_per_du
@@ -41,12 +52,15 @@ class RelativeCamera:
     """
     近傍運用用のカメラ．ターゲットを画面中央に固定し，地球を下に回転させて描画する．
     """
-    def __init__(self, screen_width: int, screen_height: int, pixels_per_du: float):
-        self.center_x = screen_width // 2
-        self.center_y = screen_height // 2
+    def __init__(self, screen: pygame.Surface, pixels_per_du: float):
+        self.screen_width = screen.get_width()
+        self.screen_height = screen.get_height()
         # マクロ視点の数千〜数万倍のズーム倍率を設定する
         self.pixels_per_du = pixels_per_du 
         self.target_body: RigidBody = None
+
+        self.center_x = self.screen_width // 2
+        self.center_y = self.screen_height // 2
 
     def world_to_screen(self, world_pos: np.ndarray) -> Tuple[int, int]:
         if self.target_body is None:
@@ -71,6 +85,16 @@ class RelativeCamera:
         screen_y = self.center_y - int(x_local * self.pixels_per_du)
 
         return (screen_x, screen_y)
+    
+    def update_screen_size(self, screen: pygame.Surface) -> None:
+        """
+        ウィンドウサイズが変更された際に呼ばれ，内部の画面サイズと中心座標を再計算する．
+        """
+        self.screen_width = screen.get_width()
+        self.screen_height = screen.get_height()
+        
+        self.center_x = self.screen_width // 2
+        self.center_y = self.screen_height // 2
     
     def set_pixels_per_du(self, pixels_per_du: float) -> None: self.pixels_per_du = pixels_per_du
     def set_target_body(self, target_body: RigidBody) -> None: self.target_body = target_body
