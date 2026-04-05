@@ -1,10 +1,27 @@
 # view/renderer.py
+import sys
+
+try:
+    import js
+    js.console.log("R-0. renderer.py: ok")
+except: pass
+
 import pygame
 import numpy as np
 from typing import Dict
 from datetime import datetime
+
+try:
+    import js
+    js.console.log("R-1. pygame, numpy: ok")
+except: pass
+
 from skyfield.api import load
-import sys
+
+try:
+    import js
+    js.console.log("R-2. skyfield: ok")
+except: pass
 
 from physics.body import RigidBody
 from view.camera import Camera, RelativeCamera
@@ -12,11 +29,21 @@ from physics.constants import (
     METER_TO_DU, SEC_TO_TU, TU_TO_SEC, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL, KG_TO_MU
 )
 
+try:
+    import js
+    js.console.log("R-3. physics.body, view.camera: ok")
+except: pass
+
 COLOR_EARTH = (50, 150, 255)
 COLOR_PLAYER = (0, 255, 0)
 COLOR_DEBRIS = (200, 200, 200)
 COLOR_PREDICTION = (255, 255, 255, 150)
 COLOR_UI_TEXT = (220, 220, 220)
+
+try:
+    import js
+    js.console.log("R-4. difine GameRenderer from now on")
+except: pass
 
 class GameRenderer:
     """
