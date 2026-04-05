@@ -10,7 +10,6 @@ except ImportError:
 
 import pygame
 import numpy as np
-import skyfield
 from datetime import datetime, timedelta, timezone
 import asyncio
 import traceback

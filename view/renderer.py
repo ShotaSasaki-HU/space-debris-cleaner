@@ -10,17 +10,11 @@ import pygame
 import numpy as np
 from typing import Dict
 from datetime import datetime
+import asyncio
 
 try:
     import js
-    js.console.log("R-1. pygame, numpy: ok")
-except: pass
-
-from skyfield.api import load
-
-try:
-    import js
-    js.console.log("R-2. skyfield: ok")
+    js.console.log("R-1. import libraries: ok")
 except: pass
 
 from physics.body import RigidBody
@@ -31,7 +25,7 @@ from physics.constants import (
 
 try:
     import js
-    js.console.log("R-3. physics.body, view.camera: ok")
+    js.console.log("R-2. physics.body, view.camera: ok")
 except: pass
 
 COLOR_EARTH = (50, 150, 255)
@@ -42,7 +36,7 @@ COLOR_UI_TEXT = (220, 220, 220)
 
 try:
     import js
-    js.console.log("R-4. difine GameRenderer from now on")
+    js.console.log("R-3. difine GameRenderer from now on")
 except: pass
 
 class GameRenderer:
@@ -777,14 +771,28 @@ class GameRenderer:
 
         # --- ラベルココマデ ---
     
-    def _setup_starry_sky(self):
+    async def _setup_starry_sky(self):
         """起動時に1度だけ星をロード"""
-        print("RENDERER REACHED: _setup_starry_sky に到達！", file=sys.stderr)
+        try:
+            import js
+            js.console.log("_setup_starry_sky: loading skyfield module...")
+        except: pass
+
+        await asyncio.sleep(0) # ブラウザに一旦息継ぎさせる．
+
+        from skyfield.api import load
+
+        try:
+            import js
+            js.console.log("_setup_starry_sky: loading star catalog...")
+        except: pass
+
+        await asyncio.sleep(0)
 
         ra_list = []
         dec_list = []
         mag_list = []
-        """
+
         # ファイルを開いて1行ずつ読み込み
         with open('assets/data/hip_main.dat', 'r', encoding='utf-8') as f:
             for line in f:
@@ -819,7 +827,7 @@ class GameRenderer:
                 except ValueError:
                     # 数値への変換に失敗した行（ヘッダや破損データ）は安全にスキップ
                     continue
-        """
+
         # リストをNumPy配列に変換して保存（以降の描画計算を高速化）
         self.star_ra = np.array(ra_list)
         self.star_dec = np.array(dec_list)
