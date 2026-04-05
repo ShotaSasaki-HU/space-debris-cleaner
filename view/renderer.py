@@ -3,8 +3,7 @@ import pygame
 import numpy as np
 from typing import Dict
 from datetime import datetime
-from skyfield.api import load, Star
-from skyfield.data import hipparcos
+from skyfield.api import load
 
 from physics.body import RigidBody
 from view.camera import Camera, RelativeCamera
@@ -755,6 +754,8 @@ class GameRenderer:
         ra_list = []
         dec_list = []
         mag_list = []
+
+        print("GameRenderer._setup_starry_sky: Loading star catalog...")
         
         # ファイルを開いて1行ずつ読み込み
         with open('assets/data/hip_main.dat', 'r', encoding='utf-8') as f:
