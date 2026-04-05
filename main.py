@@ -5,6 +5,7 @@ import sys
 import numpy as np
 from datetime import datetime, timedelta, timezone
 import asyncio
+import traceback
 
 from physics.engine import GravityEngine
 from physics.body import RigidBody
@@ -410,8 +411,19 @@ class SpaceDebrisApp:
         sys.exit()
 
 async def main():
-    app = SpaceDebrisApp()
-    await app.run()
+    try:
+        app = SpaceDebrisApp()
+        await app.run()
+    except Exception as e:
+        # どんなエラーが起きてもブラウザをフリーズさせず，赤文字で死因を叫ばせる．
+        print("\n" + "="*50, file=sys.stderr)
+        print("ERROR", file=sys.stderr)
+        traceback.print_exc()
+        print("="*50 + "\n", file=sys.stderr)
+        
+        # ログを出力しきるためにブラウザのプロセスを寝かしつつ生かし続ける．
+        while True:
+            await asyncio.sleep(1)
 
 if __name__ == "__main__":
     asyncio.run(main())
