@@ -4,6 +4,7 @@ import numpy as np
 from typing import Dict
 from datetime import datetime
 from skyfield.api import load
+import sys
 
 from physics.body import RigidBody
 from view.camera import Camera, RelativeCamera
@@ -755,7 +756,7 @@ class GameRenderer:
         dec_list = []
         mag_list = []
 
-        print("GameRenderer._setup_starry_sky: Loading star catalog...")
+        print("GameRenderer._setup_starry_sky: Loading star catalog...", file=sys.stderr)
         
         # ファイルを開いて1行ずつ読み込み
         with open('assets/data/hip_main.dat', 'r', encoding='utf-8') as f:
