@@ -1,26 +1,38 @@
 # requirements: numpy, skyfield
 # main.py
 import pygame
+print("pygame", file=sys.stderr)
 import sys
+print("sys", file=sys.stderr)
 import numpy as np
+print("np", file=sys.stderr)
 from datetime import datetime, timedelta, timezone
+print("datetime", file=sys.stderr)
 import asyncio
+print("asyncio", file=sys.stderr)
 import traceback
+print("traceback", file=sys.stderr)
 
 from physics.engine import GravityEngine
+print("GravityEngine", file=sys.stderr)
 from physics.body import RigidBody
+print("RigidBody", file=sys.stderr)
 from physics.constants import (
     KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL, TU_TO_SEC, SEC_TO_TU,
     CLEANER_SAT_MASS_KG, CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2, CLEANER_SAT_SIZE_METER,
     MAX_THRUST_NEWTON, MAX_TORQUE_NM, NEWTON_TO_CANONICAL, NM_TO_CANONICAL
 )
+print("physics.constants", file=sys.stderr)
 from physics.control import PIDController
+print("PIDController", file=sys.stderr)
 from view.camera import Camera, RelativeCamera
+print("Camera, RelativeCamera", file=sys.stderr)
 from view.renderer import GameRenderer
+print("GameRenderer", file=sys.stderr)
 from utils.loader import LevelLoader
+print("LevelLoader", file=sys.stderr)
 from utils.audio import ThrusterAudioManager
-
-print("1. IMPORTS OK: トップレベルの読み込み完了", file=sys.stderr)
+print("ThrusterAudioManager", file=sys.stderr)
 
 # アプリケーション全体の設定
 SCREEN_WIDTH_INIT = 1280

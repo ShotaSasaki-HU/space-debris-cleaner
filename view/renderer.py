@@ -752,7 +752,7 @@ class GameRenderer:
     
     def _setup_starry_sky(self):
         """起動時に1度だけ星をロード"""
-        print("2. RENDERER REACHED: _setup_starry_sky に到達！", file=sys.stderr)
+        print("RENDERER REACHED: _setup_starry_sky に到達！", file=sys.stderr)
 
         ra_list = []
         dec_list = []
@@ -800,7 +800,7 @@ class GameRenderer:
 
         self.ts = load.timescale(builtin=True) # ネットワークに繋ぎにいかないように設定
         self.star_color_tint = (0.7, 0.85, 1.0) # 星空の色温度（Tint）設定
-        print("3. RENDERER FINISHED: フリーズせずに星空のセットアップ完了", file=sys.stderr)
+        print("RENDERER FINISHED: フリーズせずに星空のセットアップ完了", file=sys.stderr)
     
     def draw_starry_sky(self, simulation_time: datetime):
         """背景の星空を描画する"""
