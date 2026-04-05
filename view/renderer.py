@@ -752,7 +752,7 @@ class GameRenderer:
     
     def _setup_starry_sky(self):
         """起動時に1度だけ星をロード"""
-        with load.open(hipparcos.URL) as f:
+        with load.open('assets/data/hip_main.dat') as f:
             df = hipparcos.load_dataframe(f)
         
         bright_df = df[df['magnitude'] <= 6.0]
@@ -761,7 +761,7 @@ class GameRenderer:
         self.star_dec = np.radians(bright_df['dec_degrees'].values) # 星の赤緯（DEC）
         self.star_mags = bright_df['magnitude'].values
 
-        self.ts = load.timescale()
+        self.ts = load.timescale(builtin=True) # ネットワークに繋ぎにいかないように設定
         self.star_color_tint = (0.7, 0.85, 1.0) # 星空の色温度（Tint）設定
     
     def draw_starry_sky(self, simulation_time: datetime):

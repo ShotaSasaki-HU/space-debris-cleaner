@@ -1,8 +1,10 @@
+# requirements: numpy, pandas, skyfield
 # main.py
 import pygame
 import sys
 import numpy as np
 from datetime import datetime, timedelta, timezone
+import asyncio
 
 from physics.engine import GravityEngine
 from physics.body import RigidBody
@@ -394,17 +396,22 @@ class SpaceDebrisApp:
                               self.mission_start_time, self.simulation_time, self.fast_forward_rate, self.capture_state, self.capture_progress)
         pygame.display.flip()
 
-    def run(self):
+    async def run(self):
         """メインループ"""
         while self.running:
             dt_real_sec = self.clock.tick(FPS) / 1000.0 # FPSの上限を設定し，前回からの経過時間を返す．
             self.handle_events()
             self.update(dt_real_sec)
             self.render()
+
+            await asyncio.sleep(0) # ブラウザに制御を返す．
             
         pygame.quit()
         sys.exit()
 
-if __name__ == "__main__":
+async def main():
     app = SpaceDebrisApp()
-    app.run()
+    await app.run()
+
+if __name__ == "__main__":
+    asyncio.run(main())
