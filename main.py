@@ -453,7 +453,9 @@ class SpaceDebrisApp:
 async def main():
     try:
         app = SpaceDebrisApp()
+        await app.renderer.async_setup_starry_sky()
         await app.run()
+
     except Exception as e:
         # どんなエラーが起きてもブラウザをフリーズさせず，赤文字で死因を叫ばせる．
         print("\n" + "="*50, file=sys.stderr)

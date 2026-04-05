@@ -51,8 +51,6 @@ class GameRenderer:
         self.prediction_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
         self.scaled_cache: Dict[str, tuple[int, int, pygame.Surface]] = {}
 
-        self._setup_starry_sky()
-
     def clear(self, bg_color: tuple = (10, 10, 20)):
         """画面をクリアする"""
         self.screen.fill(bg_color)
@@ -771,7 +769,7 @@ class GameRenderer:
 
         # --- ラベルココマデ ---
     
-    async def _setup_starry_sky(self):
+    async def async_setup_starry_sky(self):
         """起動時に1度だけ星をロード"""
         try:
             import js
@@ -835,7 +833,6 @@ class GameRenderer:
 
         self.ts = load.timescale(builtin=True) # ネットワークに繋ぎにいかないように設定
         self.star_color_tint = (0.7, 0.85, 1.0) # 星空の色温度（Tint）設定
-        print("RENDERER FINISHED: フリーズせずに星空のセットアップ完了", file=sys.stderr)
     
     def draw_starry_sky(self, simulation_time: datetime):
         """背景の星空を描画する"""
