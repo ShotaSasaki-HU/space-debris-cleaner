@@ -451,17 +451,25 @@ class SpaceDebrisApp:
         sys.exit()
 
 async def main():
+    import js
     try:
+        js.console.log("main(): initializing SpaceDebrisApp...")
         app = SpaceDebrisApp()
+        js.console.log("main(): initialized SpaceDebrisApp...")
+
         await app.renderer.async_setup_starry_sky()
+
+        js.console.log("main(): running into the main loop...")
         await app.run()
 
     except Exception as e:
-        # どんなエラーが起きてもブラウザをフリーズさせず，赤文字で死因を叫ばせる．
-        print("\n" + "="*50, file=sys.stderr)
-        print("ERROR", file=sys.stderr)
-        traceback.print_exc()
-        print("="*50 + "\n", file=sys.stderr)
+        # どんなエラーが起きてもブラウザのConsoleに赤文字で出力する．
+        js.console.error(f"ERROR IN WASM: {str(e)}")
+
+        # tracebackも文字列にして無理やりJSコンソールに流し込む．
+        import traceback
+        err_msg = traceback.format_exc()
+        js.console.error(err_msg)
         
         # ログを出力しきるためにブラウザのプロセスを寝かしつつ生かし続ける．
         while True:

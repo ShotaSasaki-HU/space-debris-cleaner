@@ -47,7 +47,7 @@ class GameRenderer:
         self.screen = screen
         self.camera = camera
         self.image_cache: Dict[str, pygame.Surface] = {}
-        self.font = pygame.font.SysFont("couriernew", 20)
+        self.font = pygame.font.SysFont(None, 20)
         self.prediction_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
         self.scaled_cache: Dict[str, tuple[int, int, pygame.Surface]] = {}
 
