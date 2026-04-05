@@ -752,14 +752,49 @@ class GameRenderer:
     
     def _setup_starry_sky(self):
         """起動時に1度だけ星をロード"""
-        with load.open('assets/data/hip_main.dat') as f:
-            df = hipparcos.load_dataframe(f)
+        ra_list = []
+        dec_list = []
+        mag_list = []
         
-        bright_df = df[df['magnitude'] <= 6.0]
-        self.star_positions = Star.from_dataframe(bright_df)
-        self.star_ra = np.radians(bright_df['ra_degrees'].values) # 星の赤経（RA）
-        self.star_dec = np.radians(bright_df['dec_degrees'].values) # 星の赤緯（DEC）
-        self.star_mags = bright_df['magnitude'].values
+        # ファイルを開いて1行ずつ読み込み
+        with open('assets/data/hip_main.dat', 'r', encoding='utf-8') as f:
+            for line in f:
+                # 行の長さが足りない場合や，空行はスキップ．
+                if len(line) < 60:
+                    continue
+                
+                try:
+                    # パイプ記号による区切りではなく，文字の位置（スライス）で抽出する．
+                    # データの仕様：RAは位置[51:63]，DECは位置[64:76]，Magnitudeは位置[41:46]
+                    mag_str = line[41:46].strip()
+                    
+                    # 等級が空欄のデータは無視
+                    if not mag_str:
+                        continue
+                        
+                    mag = float(mag_str)
+                    
+                    # 6.0等星より暗い星は描画しない．（計算をスキップして高速化）
+                    if mag > 6.0:
+                        continue
+                        
+                    # 赤経(RA)と赤緯(DEC)を抽出（単位は度数法）
+                    ra_deg = float(line[51:63].strip())
+                    dec_deg = float(line[64:76].strip())
+                    
+                    # 抽出したデータをリストに追加
+                    ra_list.append(np.radians(ra_deg))
+                    dec_list.append(np.radians(dec_deg))
+                    mag_list.append(mag)
+                    
+                except ValueError:
+                    # 数値への変換に失敗した行（ヘッダや破損データ）は安全にスキップ
+                    continue
+
+        # リストをNumPy配列に変換して保存（以降の描画計算を高速化）
+        self.star_ra = np.array(ra_list)
+        self.star_dec = np.array(dec_list)
+        self.star_mags = np.array(mag_list)
 
         self.ts = load.timescale(builtin=True) # ネットワークに繋ぎにいかないように設定
         self.star_color_tint = (0.7, 0.85, 1.0) # 星空の色温度（Tint）設定

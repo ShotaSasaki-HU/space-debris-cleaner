@@ -1,4 +1,4 @@
-# requirements: numpy, pandas, skyfield
+# requirements: numpy, skyfield
 # main.py
 import pygame
 import sys

@@ -3,7 +3,6 @@ iniconfig==2.3.0
 jplephem==2.24
 numpy==2.4.3
 packaging==26.0
-pandas==3.0.2
 pluggy==1.6.0
 pygame==2.6.1
 Pygments==2.19.2
