@@ -752,12 +752,12 @@ class GameRenderer:
     
     def _setup_starry_sky(self):
         """起動時に1度だけ星をロード"""
+        print("2. RENDERER REACHED: _setup_starry_sky に到達！", file=sys.stderr)
+
         ra_list = []
         dec_list = []
         mag_list = []
-
-        print("GameRenderer._setup_starry_sky: Loading star catalog...", file=sys.stderr)
-        
+        """
         # ファイルを開いて1行ずつ読み込み
         with open('assets/data/hip_main.dat', 'r', encoding='utf-8') as f:
             for line in f:
@@ -792,7 +792,7 @@ class GameRenderer:
                 except ValueError:
                     # 数値への変換に失敗した行（ヘッダや破損データ）は安全にスキップ
                     continue
-
+        """
         # リストをNumPy配列に変換して保存（以降の描画計算を高速化）
         self.star_ra = np.array(ra_list)
         self.star_dec = np.array(dec_list)
@@ -800,6 +800,7 @@ class GameRenderer:
 
         self.ts = load.timescale(builtin=True) # ネットワークに繋ぎにいかないように設定
         self.star_color_tint = (0.7, 0.85, 1.0) # 星空の色温度（Tint）設定
+        print("3. RENDERER FINISHED: フリーズせずに星空のセットアップ完了", file=sys.stderr)
     
     def draw_starry_sky(self, simulation_time: datetime):
         """背景の星空を描画する"""

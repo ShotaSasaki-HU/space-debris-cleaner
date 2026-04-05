@@ -20,6 +20,8 @@ from view.renderer import GameRenderer
 from utils.loader import LevelLoader
 from utils.audio import ThrusterAudioManager
 
+print("1. IMPORTS OK: トップレベルの読み込み完了", file=sys.stderr)
+
 # アプリケーション全体の設定
 SCREEN_WIDTH_INIT = 1280
 SCREEN_HEIGHT_INIT = 720
