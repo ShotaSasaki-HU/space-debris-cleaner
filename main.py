@@ -53,8 +53,8 @@ class SpaceDebrisApp:
         self.capture_time_required_sec = 10.0 # 捕獲完了に必要な継続接触時間（秒）
 
         self.thruster_audio = ThrusterAudioManager(
-            loop_wav_path="assets/sounds/RcsHeavy.wav",
-            shutoff_wav_path="assets/sounds/RcsHeavyShutoff.wav"
+            loop_wav_path="assets/sounds/RcsHeavy.ogg",
+            shutoff_wav_path="assets/sounds/RcsHeavyShutoff.ogg"
         )
 
         self._setup_physics()
