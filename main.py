@@ -4,7 +4,7 @@ import sys
 
 try:
     import js
-    js.console.log("0. トップレベル実行開始！")
+    js.console.log("0. start")
 except ImportError:
     pass
 
@@ -16,7 +16,7 @@ import traceback
 
 try:
     import js
-    js.console.log("1. 外部ライブラリのimport成功")
+    js.console.log("1. import libraries: ok")
 except:
     pass
 
@@ -31,16 +31,23 @@ from physics.control import PIDController
 
 try:
     import js
-    js.console.log("2. physicsモジュールのimport成功")
+    js.console.log("2. import physics: ok")
 except:
     pass
 
 from view.camera import Camera, RelativeCamera
+
+try:
+    import js
+    js.console.log("3. import view.camera: ok")
+except:
+    pass
+
 from view.renderer import GameRenderer
 
 try:
     import js
-    js.console.log("3. viewモジュールのimport成功")
+    js.console.log("4. import view.renderer: ok")
 except:
     pass
 
@@ -49,7 +56,7 @@ from utils.audio import ThrusterAudioManager
 
 try:
     import js
-    js.console.log("4. すべてのローカルimportが完了！")
+    js.console.log("5. import utils: ok")
 except:
     pass
 
