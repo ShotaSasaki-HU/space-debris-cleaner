@@ -9,7 +9,7 @@ from skyfield.data import hipparcos
 from physics.body import RigidBody
 from view.camera import Camera, EarthCamera, RelativeCamera
 from physics.constants import (
-    METER_TO_DU, SEC_TO_TU, TU_TO_SEC, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL, KG_TO_MU
+    METER_TO_DU, SEC_TO_TU, TU_TO_SEC, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL, KG_TO_MU, EARTH_RADIUS_M
 )
 
 COLOR_EARTH = (50, 150, 255)
@@ -213,19 +213,10 @@ class GameRenderer:
         self._draw_capture_ui(capture_state, progress)
         self._draw_nav_data(player, target)
         self._draw_fuel_gage(player)
+        self._draw_flight_data(player, target, sas_enabled)
 
     def _draw_control_console(self, sas_enabled: bool, throttle: float, player: RigidBody, player_torque: float):
         """操作に関するテキスト表示"""
-
-        """
-        # UIの一番上に現在のカメラモードを描画
-        mode_text = "VIEW: " + ("EARTH" if isinstance(self.camera, Camera) else "TRACKING")
-        self.screen.blit(self.font.render(mode_text, True, COLOR_UI_TEXT), (20, 20))
-        
-        sas_text = "SAS: ON" if sas_enabled else "SAS: OFF"
-        sas_color = (100, 255, 100) if sas_enabled else (200, 200, 200)
-        self.screen.blit(self.font.render(sas_text, True, sas_color), (20, 40))
-        """
 
         # スロットル
         self._draw_bar_gauge(screen=self.screen, cx=self.screen.get_width() - 85, cy=self.screen.get_height() - 105, w=50, h=150,
@@ -899,3 +890,49 @@ class GameRenderer:
         )
 
         return
+    
+    def _draw_flight_data(self, player: RigidBody, target: RigidBody, sas_enabled: bool):
+        """システムステータスとフライトデータを画面右側に描画"""
+        cam_mode = "EARTH" if isinstance(self.camera, EarthCamera) else "TRACKING"
+        sas_text = "ON (AUTO)" if sas_enabled else "OFF (MANUAL)"
+        sas_color = (100, 255, 100) if sas_enabled else COLOR_UI_TEXT
+
+        # 高度 = 中心からの距離 - 地球の半径
+        alt_km = ((np.linalg.norm(player.position) / METER_TO_DU) - EARTH_RADIUS_M) / 1000.0
+        # 速度の絶対値
+        v_mag = np.linalg.norm(player.velocity) * (SEC_TO_TU / METER_TO_DU)
+
+        # 描画開始位置
+        start_x = self.screen.get_width() - 250
+        start_y = 200
+        line_h = 24
+
+        # 表示する項目のリスト
+        lines = [
+            ("CAMERA", cam_mode, COLOR_UI_TEXT),
+            ("SAS", sas_text, sas_color),
+            ("ALT", f"{alt_km:,.1f} km", COLOR_UI_TEXT),
+            ("VEL", f"{v_mag:,.1f} m/s", COLOR_UI_TEXT),
+        ]
+
+        # ターゲットまでの距離（ドッキング時の目測に必須）
+        if player != target:
+            dist_m = np.linalg.norm(target.position - player.position) / METER_TO_DU
+            
+            # 距離が遠い場合はkm，近い場合はmで表示を切り替える．
+            if dist_m > 10000:
+                lines.append(("T-DIST", f"{(dist_m / 1000.0):,.1f} km", (255, 255, 0)))
+            else:
+                lines.append(("T-DIST", f"{dist_m:,.1f} m", (255, 255, 0)))
+
+        # テキストの描画ループ
+        for i, (label, val, color) in enumerate(lines):
+            y = start_y + i * line_h
+            
+            # ラベル
+            label_surf = self.font.render(f"{label:<6}:", True, COLOR_UI_TEXT)
+            self.screen.blit(label_surf, (start_x, y))
+            
+            # 値（ラベルの右側に色付きで配置）
+            val_surf = self.font.render(val, True, color)
+            self.screen.blit(val_surf, (start_x + 90, y))
