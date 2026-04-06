@@ -778,7 +778,6 @@ class GameRenderer:
 
         await asyncio.sleep(0) # ブラウザに一旦息継ぎさせる．
 
-        import sgp4
         from skyfield.api import load
 
         try:

@@ -1,10 +1,4 @@
-# /// script
-# dependencies = [
-#     "numpy",
-#     "skyfield",
-#     "sgp4",
-# ]
-# ///
+# requirements: numpy, skyfield, sgp4
 
 # main.py
 import sys
