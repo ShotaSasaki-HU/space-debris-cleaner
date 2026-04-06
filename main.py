@@ -4,7 +4,10 @@ import sys
 import asyncio
 import traceback
 import pygame
-import numpy
+
+if False:
+    import numpy
+    import skyfield
 
 pygame.init()
 
