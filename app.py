@@ -3,7 +3,6 @@ import pygame
 import numpy as np
 from datetime import datetime, timedelta, timezone
 import asyncio
-import traceback
 
 from physics.engine import GravityEngine
 from physics.body import RigidBody

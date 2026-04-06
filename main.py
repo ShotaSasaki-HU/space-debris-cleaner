@@ -7,15 +7,15 @@ import pygame
 
 pygame.init()
 
-SCREEN_WIDTH_INIT = 1280
-SCREEN_HEIGHT_INIT = 720
-
 if sys.platform in ["emscripten", "wasm32"]:
     SCREEN = pygame.display.set_mode((1280, 720))
 else:
     SCREEN = pygame.display.set_mode((1280, 720), pygame.RESIZABLE)
 
 pygame.display.set_caption("Space Debris Cleaner")
+
+import numpy
+import skyfield
 
 async def main():
     import js
