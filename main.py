@@ -4,6 +4,7 @@ import sys
 import asyncio
 import traceback
 import pygame
+import numpy
 
 pygame.init()
 
@@ -13,8 +14,6 @@ else:
     SCREEN = pygame.display.set_mode((1280, 720), pygame.RESIZABLE)
 
 pygame.display.set_caption("Space Debris Cleaner")
-
-import numpy
 
 async def main():
     import js
