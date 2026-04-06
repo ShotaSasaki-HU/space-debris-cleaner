@@ -7,7 +7,6 @@ import pygame
 
 if False:
     import numpy
-    import skyfield
 
 pygame.init()
 

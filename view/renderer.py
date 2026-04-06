@@ -793,7 +793,10 @@ class GameRenderer:
 
         # ファイルを開いて1行ずつ読み込み
         with open('assets/data/hip_main.dat', 'r', encoding='utf-8') as f:
-            for line in f:
+            for i, line in enumerate(f):
+                if i % 5000 == 0:
+                    await asyncio.sleep(0)
+
                 # 行の長さが足りない場合や，空行はスキップ．
                 if len(line) < 60:
                     continue
