@@ -219,7 +219,7 @@ class GameRenderer:
         """操作に関するテキスト表示"""
 
         # スロットル
-        self._draw_bar_gauge(screen=self.screen, cx=self.screen.get_width() - 85, cy=self.screen.get_height() - 105, w=50, h=150,
+        self._draw_bar_gauge(screen=self.screen, cx=self.screen.get_width() - 100, cy=self.screen.get_height() - 105, w=50, h=150,
                              angle=0.0, min_val=0.0, max_val=1.0, input_val=throttle, full_color=(255, 0, 0),
                              stack_labels=['Throttle', f'{throttle * 100:.0f}%'], is_gradation=True)
 
