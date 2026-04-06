@@ -9,24 +9,6 @@ except ImportError:
     pass
 
 import pygame
-
-# アプリケーション全体の設定
-SCREEN_WIDTH_INIT = 1280
-SCREEN_HEIGHT_INIT = 720
-FPS = 60
-PIXELS_PER_DU = 200.0
-
-try:
-    pygame.init()
-    if sys.platform in ["emscripten", "wasm32"]:
-        SCREEN = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), pygame.SCALED)
-    else:
-        SCREEN = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), pygame.RESIZABLE)
-
-    pygame.display.set_caption("Space Debris Cleaner")
-except Exception as e:
-    js.console.error(f"ERROR IN WASM: {str(e)}")
-
 import numpy as np
 from datetime import datetime, timedelta, timezone
 import asyncio
@@ -78,6 +60,11 @@ try:
 except:
     pass
 
+# アプリケーション全体の設定
+SCREEN_WIDTH_INIT = 1280
+SCREEN_HEIGHT_INIT = 720
+FPS = 60
+PIXELS_PER_DU = 200.0
 TIME_STEP_TU_PHYSICS = (1 / FPS) * SEC_TO_TU # 物理エンジンの微小ステップ幅
 
 class SpaceDebrisApp:
@@ -89,11 +76,9 @@ class SpaceDebrisApp:
         pygame.init()
 
         if sys.platform in ["emscripten", "wasm32"]:
-            # WASM（ブラウザ）環境：引数はサイズのみ（WebGLデフォルト設定が適用される）
-            self.screen = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT))
+            self.screen = pygame.display.set_mode((1280, 720), pygame.SCALED)
         else:
-            # ローカルPC環境：RESIZABLEフラグを付与して快適にデバッグ
-            self.screen = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), pygame.RESIZABLE)
+            self.screen = pygame.display.set_mode((1280, 720), pygame.RESIZABLE)
 
         pygame.display.set_caption("Space Debris Cleaner")
         self.clock = pygame.time.Clock()
@@ -487,7 +472,6 @@ async def main():
         js.console.error(f"ERROR IN WASM: {str(e)}")
 
         # tracebackも文字列にして無理やりJSコンソールに流し込む．
-        import traceback
         err_msg = traceback.format_exc()
         js.console.error(err_msg)
         
