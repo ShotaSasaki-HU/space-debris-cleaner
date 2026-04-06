@@ -497,7 +497,7 @@ class GameRenderer:
                 pygame.draw.circle(self.screen, (255, 255, 0), (rel_v_x_px, rel_v_y_px), 7)
 
         # クリーナー衛星のIMUが計測する加速度
-        acc_imu = player.get_acc_from_imu()
+        acc_imu = player.get_acc_from_imu() * (SEC_TO_TU ** 2 / METER_TO_DU)
         acc_x, acc_y = acc_imu[0], acc_imu[1]
 
         # 加速度マーカーの位置
