@@ -75,17 +75,12 @@ class SpaceDebrisApp:
     def __init__(self):
         pygame.init()
 
-        # デフォルトはフラグなし（WASM環境など向け）
-        display_flags = 0
-        # 'emscripten'はブラウザ(WASM)環境を示す文字列
-        # それ以外の環境（ローカルPC）でのみ，RESIZABLEフラグを付与．
-        if sys.platform != "emscripten":
-            display_flags = pygame.RESIZABLE
-            
-        self.screen = pygame.display.set_mode(
-            (SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), 
-            display_flags
-        )
+        if sys.platform in ["emscripten", "wasm32"]:
+            # WASM（ブラウザ）環境：引数はサイズのみ（WebGLデフォルト設定が適用される）
+            self.screen = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT))
+        else:
+            # ローカルPC環境：RESIZABLEフラグを付与して快適にデバッグ
+            self.screen = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), pygame.RESIZABLE)
 
         pygame.display.set_caption("Space Debris Cleaner")
         self.clock = pygame.time.Clock()
