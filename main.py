@@ -12,7 +12,7 @@ from physics.constants import (
     MAX_THRUST_NEWTON, MAX_TORQUE_NM, NEWTON_TO_CANONICAL, NM_TO_CANONICAL
 )
 from physics.control import PIDController
-from view.camera import Camera, RelativeCamera
+from view.camera import Camera, EarthCamera, RelativeCamera
 from view.renderer import GameRenderer
 from utils.loader import LevelLoader
 from utils.audio import ThrusterAudioManager
@@ -108,7 +108,7 @@ class SpaceDebrisApp:
 
     def _setup_view(self):
         """描画関連の初期化"""
-        self.earth_camera = Camera(self.screen, PIXELS_PER_DU)
+        self.earth_camera = EarthCamera(self.screen, PIXELS_PER_DU)
 
         self.tracking_camera = RelativeCamera(self.screen, PIXELS_PER_DU)
         self.tracking_camera.set_target_body(self.selected_body)
@@ -196,7 +196,7 @@ class SpaceDebrisApp:
                         self.capture_state = 'IDLE'
                         self.capture_progress = 0.0
                 
-                if type(self.renderer.camera) is Camera:
+                if type(self.renderer.camera) is EarthCamera:
                     if event.key == pygame.K_RIGHT:
                         max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / (1.3 * 2.0) # 地球の直径 = 2DU
                         self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))

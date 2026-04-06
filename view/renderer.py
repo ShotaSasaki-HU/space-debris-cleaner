@@ -7,7 +7,7 @@ from skyfield.api import load, Star
 from skyfield.data import hipparcos
 
 from physics.body import RigidBody
-from view.camera import Camera, RelativeCamera
+from view.camera import Camera, EarthCamera, RelativeCamera
 from physics.constants import (
     METER_TO_DU, SEC_TO_TU, TU_TO_SEC, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL, KG_TO_MU
 )
@@ -149,8 +149,8 @@ class GameRenderer:
 
                 # --- スケーリングのキャッシュココマデ ---
 
-                # Cameraの場合
-                if isinstance(self.camera, Camera):
+                # EarthCameraの場合
+                if isinstance(self.camera, EarthCamera):
                     rotated_image = pygame.transform.rotate(scaled_image, np.rad2deg(body.angle))
                 # RelativeCameraの場合
                 else:
