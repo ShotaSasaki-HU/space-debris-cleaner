@@ -9,6 +9,22 @@ except ImportError:
     pass
 
 import pygame
+
+# アプリケーション全体の設定
+SCREEN_WIDTH_INIT = 1280
+SCREEN_HEIGHT_INIT = 720
+FPS = 60
+PIXELS_PER_DU = 200.0
+TIME_STEP_TU_PHYSICS = (1 / FPS) * SEC_TO_TU # 物理エンジンの微小ステップ幅
+
+pygame.init()
+if sys.platform in ["emscripten", "wasm32"]:
+    SCREEN = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), pygame.SCALED)
+else:
+    SCREEN = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), pygame.RESIZABLE)
+
+pygame.display.set_caption("Space Debris Cleaner")
+
 import numpy as np
 from datetime import datetime, timedelta, timezone
 import asyncio
@@ -59,13 +75,6 @@ try:
     js.console.log("5. import utils: ok")
 except:
     pass
-
-# アプリケーション全体の設定
-SCREEN_WIDTH_INIT = 1280
-SCREEN_HEIGHT_INIT = 720
-FPS = 60
-PIXELS_PER_DU = 200.0
-TIME_STEP_TU_PHYSICS = (1 / FPS) * SEC_TO_TU # 物理エンジンの微小ステップ幅
 
 class SpaceDebrisApp:
     """
