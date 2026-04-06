@@ -208,14 +208,14 @@ class GameRenderer:
     def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float, player_torque: float,
                 mission_start_time: datetime, simulation_time: datetime, fast_forward_rate: float, capture_state: str, progress: float):
         """各種UIを描画する"""
-        self._draw_control_console(sas_enabled, throttle, player, player_torque)
+        self._draw_control_console(throttle, player, player_torque)
         self._draw_time(mission_start_time, simulation_time, fast_forward_rate)
         self._draw_capture_ui(capture_state, progress)
         self._draw_nav_data(player, target)
         self._draw_fuel_gage(player)
         self._draw_flight_data(player, target, sas_enabled)
 
-    def _draw_control_console(self, sas_enabled: bool, throttle: float, player: RigidBody, player_torque: float):
+    def _draw_control_console(self, throttle: float, player: RigidBody, player_torque: float):
         """操作に関するテキスト表示"""
 
         # スロットル
