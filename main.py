@@ -1,12 +1,15 @@
-# requirements: numpy, skyfield
+# /// script
+# dependencies = [
+#     "numpy",
+#     "skyfield",
+# ]
+# ///
+
 # main.py
 import sys
 import asyncio
 import traceback
 import pygame
-
-if False:
-    import numpy
 
 pygame.init()
 
