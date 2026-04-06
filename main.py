@@ -15,7 +15,6 @@ SCREEN_WIDTH_INIT = 1280
 SCREEN_HEIGHT_INIT = 720
 FPS = 60
 PIXELS_PER_DU = 200.0
-TIME_STEP_TU_PHYSICS = (1 / FPS) * SEC_TO_TU # 物理エンジンの微小ステップ幅
 
 pygame.init()
 if sys.platform in ["emscripten", "wasm32"]:
@@ -75,6 +74,8 @@ try:
     js.console.log("5. import utils: ok")
 except:
     pass
+
+TIME_STEP_TU_PHYSICS = (1 / FPS) * SEC_TO_TU # 物理エンジンの微小ステップ幅
 
 class SpaceDebrisApp:
     """
