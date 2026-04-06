@@ -2,6 +2,7 @@
 # dependencies = [
 #     "numpy",
 #     "skyfield",
+#     "sgp4",
 # ]
 # ///
 
