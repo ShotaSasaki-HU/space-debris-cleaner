@@ -3,7 +3,7 @@ name: Deploy Space Debris Cleaner to GitHub Pages
 on:
   push:
     branches:
-      - main # mainブランチにpushされたら発動
+      - wasm-experiment # このブランチにpushされたら発動
 
 jobs:
   build-and-deploy:

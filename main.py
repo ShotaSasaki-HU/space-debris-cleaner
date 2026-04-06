@@ -16,13 +16,16 @@ SCREEN_HEIGHT_INIT = 720
 FPS = 60
 PIXELS_PER_DU = 200.0
 
-pygame.init()
-if sys.platform in ["emscripten", "wasm32"]:
-    SCREEN = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), pygame.SCALED)
-else:
-    SCREEN = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), pygame.RESIZABLE)
+try:
+    pygame.init()
+    if sys.platform in ["emscripten", "wasm32"]:
+        SCREEN = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), pygame.SCALED)
+    else:
+        SCREEN = pygame.display.set_mode((SCREEN_WIDTH_INIT, SCREEN_HEIGHT_INIT), pygame.RESIZABLE)
 
-pygame.display.set_caption("Space Debris Cleaner")
+    pygame.display.set_caption("Space Debris Cleaner")
+except Exception as e:
+    js.console.error(f"ERROR IN WASM: {str(e)}")
 
 import numpy as np
 from datetime import datetime, timedelta, timezone
