@@ -900,7 +900,7 @@ class GameRenderer:
         # 高度 = 中心からの距離 - 地球の半径
         alt_km = ((np.linalg.norm(player.position) / METER_TO_DU) - EARTH_RADIUS_M) / 1000.0
         # 速度の絶対値
-        v_mag = np.linalg.norm(player.velocity) * (SEC_TO_TU / METER_TO_DU)
+        v_mag = np.linalg.norm(player.get_velo_from_imu()) * (SEC_TO_TU / METER_TO_DU)
 
         # 描画開始位置
         start_x = self.screen.get_width() - 250
