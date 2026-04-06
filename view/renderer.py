@@ -423,7 +423,7 @@ class GameRenderer:
 
         # --- 回転ココマデ ---
 
-        # --- 並進の正方形グリッド（相対速度・IMUの加速度）ココカラ ---
+        # --- 並進の円形グリッド（相対速度・IMUの加速度）ココカラ ---
 
         max_value = 0.05 # 最大目盛り（速度と加速度で共通）
         interval_value = 0.01 # 目盛り間隔
@@ -477,11 +477,11 @@ class GameRenderer:
         sin_t = np.sin(player.angle)
 
         if player != target:
-            # ターゲットのクリーナー衛星に対する相対速度ベクトル
-            rel_v_world_si = (target.velocity - player.velocity) * (SEC_TO_TU / METER_TO_DU)
+            # クリーナー衛星のターゲットに対する相対速度ベクトル（相手に対して自分がどう動いているか）
+            player_rel_v_si = (player.velocity - target.velocity) * (SEC_TO_TU / METER_TO_DU)
             
-            rel_v_x = rel_v_world_si[0] * cos_t + rel_v_world_si[1] * sin_t
-            rel_v_y = -rel_v_world_si[0] * sin_t + rel_v_world_si[1] * cos_t
+            rel_v_x = player_rel_v_si[0] * cos_t + player_rel_v_si[1] * sin_t
+            rel_v_y = -player_rel_v_si[0] * sin_t + player_rel_v_si[1] * cos_t
 
             # 相対速度マーカーの位置
             rel_v_mag = np.hypot(rel_v_x, rel_v_y)
@@ -516,21 +516,29 @@ class GameRenderer:
         ## --- ドット描画ココマデ ---
 
         for angle, sign in zip(np.arange(0, -np.pi * 2, -np.pi / 2), ['-', '', '', '-']):
-            text_surf = self.font.render(f"{sign}{max_value:.2f} m/s", True, COLOR_UI_TEXT)
+            text_surf = self.font.render(f"{sign}{max_value:.2f}", True, COLOR_UI_TEXT)
             text_rect = text_surf.get_rect(center=(
                 cx + (half_grid_w * np.cos(angle)),
                 cy + half_grid_w + (half_grid_w * np.sin(angle))
             ))
             self.screen.blit(text_surf, text_rect.topleft)
         
-        text_surf = self.font.render("REL V", True, COLOR_UI_TEXT)
-        text_rect = text_surf.get_rect(center=(
-            cx - (half_grid_w * 0.9),
-            cy + half_grid_w - (half_grid_w * 0.9)
-        ))
-        self.screen.blit(text_surf, text_rect.topleft)
+        # 凡例
+        legend_x = cx - half_grid_w - 60
+        legend_y = cy
+        
+        legends = [
+            ("DOCK LIMIT", (0, 255, 255)),   # Cyan: 許容範囲
+            ("REL V [m/s]",  (255, 255, 0)), # Yellow: 相対速度
+            ("ΔV [m/s^2]",(255, 0, 0))       # Red: 加速度
+        ]
+        
+        # 線の色と一致させたテキスト
+        for i, (text, color) in enumerate(legends):
+            text_surf = self.font.render(text, True, color)
+            self.screen.blit(text_surf, (legend_x, legend_y + (i * 18)))
 
-        # --- 並進の正方形グリッド（相対速度・IMUの加速度）ココマデ ---
+        # --- 並進の円形グリッド（相対速度・IMUの加速度）ココマデ ---
 
         return
 
