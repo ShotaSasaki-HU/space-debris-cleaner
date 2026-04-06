@@ -15,7 +15,6 @@ else:
 pygame.display.set_caption("Space Debris Cleaner")
 
 import numpy
-import skyfield
 
 async def main():
     import js
