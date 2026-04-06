@@ -6,6 +6,11 @@ import asyncio
 import traceback
 import pygame
 
+if False:
+    import numpy
+    import skyfield
+    import sgp4
+
 pygame.init()
 
 if sys.platform in ["emscripten", "wasm32"]:
