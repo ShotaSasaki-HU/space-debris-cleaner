@@ -530,7 +530,7 @@ class GameRenderer:
         legends = [
             ("DOCK LIMIT", (0, 255, 255)),   # Cyan: 許容範囲
             ("REL V [m/s]",  (255, 255, 0)), # Yellow: 相対速度
-            ("ΔV [m/s^2]",(255, 0, 0))       # Red: 加速度
+            ("ACC [m/s^2]",(255, 0, 0))      # Red: 加速度
         ]
         
         # 線の色と一致させたテキスト
