@@ -443,14 +443,57 @@ class SpaceDebrisApp:
     
     def _check_win_loss_condition(self):
         """ゲームの終了条件を監視"""
-        ATMOSPHERE_RADIUS_M = EARTH_RADIUS_M + 100e3 # 空力加熱を起こし始める高度（m）
-        ATMOSPHERE_RADIUS_DU = ATMOSPHERE_RADIUS_M * METER_TO_DU
+        # doomed: 消える運命にある
+        player_doomed = False
+        debris_doomed = False
 
-        # 勝利条件：ドッキングしている and プレイヤーとターゲットが大気圏突入
-        # 勝利条件：ドッキングしていない and (任意のデブリが突入済み or 突入見込み) and (プレイヤーが突入済み or 突入見込み)．プレイヤーが先に突入してもよい．
-        # ↑2つの勝利条件は結合できると思う．ドッキング状態に依存しない．
-        # 敗北条件：燃料がゼロ and プレイヤーの突入見込み無し
-        # 敗北条件：(デブリが1機も突入していない or 突入見込み無し) and プレイヤーが突入済み
+        # 予測軌道から「大気圏に突入する運命にあるか」を判定
+        for body_id, path in self.orbital_predictions.items():
+            if not path: continue
+
+            # 地球は判定から除外（含んでいると無条件でdebris_doomedが立ってしまう．）
+            if body_id == id(self.earth): continue
+
+            # 軌道のうち最も地球に近い点の距離
+            min_r = min([np.linalg.norm(p) for p in path])
+
+            # 大気圏の境界を下回る未来が確定しているならドゥームフラグを立てる．
+            if min_r < ATMOSPHERE_RADIUS_DU:
+                if body_id == id(self.player_sat):
+                    player_doomed = True
+                else:
+                    debris_doomed = True
+        
+        # ドッキング中なら，プレイヤーの運命＝デブリの運命として扱う．
+        if (self.capture_state == 'DOCKED') and player_doomed:
+            debris_doomed = True
+        
+        # 予測ではなく，現在位置が実際に地表に激突しているか．
+        # または，物理エンジンの管理下から既に削除されているか．
+        is_player_crashed = (
+            np.linalg.norm(self.player_sat.position) <= (EARTH_RADIUS_M * METER_TO_DU) or
+            self.player_sat not in self.engine.bodies
+        )
+        
+        # --- 成否のステートマシンココカラ ---
+
+        # 成功条件：デブリとプレイヤー双方が突入見込み（予測線で確定）
+        if debris_doomed and player_doomed:
+            self.state = GameState.CLEAR
+            return
+        
+        # 失敗条件1：プレイヤーが地表に激突して物理的に破壊された（燃料が残っていても死）
+        # 上のCLEAR条件をすり抜けてここに来た＝デブリを落とせていないのに自分が死んだ
+        if is_player_crashed:
+            self.state = GameState.GAMEOVER
+            return
+        
+        # 失敗条件2：燃料がゼロになった時点で，CLEAR条件を満たしていないなら全て失敗．
+        if self.player_sat.propellant_mass <= 0.0:
+            self.state = GameState.GAMEOVER
+            return
+
+        # --- 成否のステートマシンココマデ ---
 
     def render(self):
         """画面の描画"""
