@@ -52,7 +52,8 @@ class GameRenderer:
             elif body_id == id(selected_body):
                 pygame.draw.aalines(self.prediction_surface, (255, 255, 0, 150), False, screen_points)
             else:
-                pygame.draw.aalines(self.prediction_surface, COLOR_PREDICTION, False, screen_points)
+                # pygame.draw.aalines(self.prediction_surface, COLOR_PREDICTION, False, screen_points)
+                pass
             
         self.screen.blit(self.prediction_surface, (0, 0))
 
