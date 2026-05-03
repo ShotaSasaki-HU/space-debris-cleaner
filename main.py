@@ -3,16 +3,17 @@ import pygame
 import sys
 import numpy as np
 from datetime import datetime, timedelta, timezone
+from enum import Enum, auto
 
 from physics.engine import GravityEngine
 from physics.body import RigidBody
 from physics.constants import (
     KG_TO_MU, EARTH_MASS_KG, METER_TO_DU, EARTH_RADIUS_M, G_CANONICAL, TU_TO_SEC, SEC_TO_TU,
     CLEANER_SAT_MASS_KG, CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2, CLEANER_SAT_SIZE_METER,
-    MAX_THRUST_NEWTON, MAX_TORQUE_NM, NEWTON_TO_CANONICAL, NM_TO_CANONICAL
+    MAX_THRUST_NEWTON, MAX_TORQUE_NM, NEWTON_TO_CANONICAL, NM_TO_CANONICAL, ATMOSPHERE_RADIUS_DU
 )
 from physics.control import PIDController
-from view.camera import Camera, EarthCamera, RelativeCamera
+from view.camera import EarthCamera, RelativeCamera
 from view.renderer import GameRenderer
 from utils.loader import LevelLoader
 from utils.audio import ThrusterAudioManager
@@ -23,6 +24,12 @@ SCREEN_HEIGHT_INIT = 720
 FPS = 60
 PIXELS_PER_DU = 200.0
 TIME_STEP_TU_PHYSICS = (1 / FPS) * SEC_TO_TU # 物理エンジンの微小ステップ幅
+
+class GameState(Enum):
+    TITLE = auto()    # タイトル画面
+    PLAYING = auto()  # ゲーム本編
+    CLEAR = auto()    # ミッション成功
+    GAMEOVER = auto() # ミッション失敗
 
 class SpaceDebrisApp:
     """
@@ -45,6 +52,8 @@ class SpaceDebrisApp:
         self.simulation_time = datetime.now(timezone.utc) # ゲーム内の時刻（物理演算には関係しない．）
         self.mission_start_time = self.simulation_time
 
+        self.orbital_predictions: dict = {}
+
         # 捕獲システムのステートマシンと変数
         self.capture_state = 'IDLE' # 'IDLE', 'CAPTURING', 'DOCKED'
         self.capture_progress = 0.0 # 捕獲の進捗（0.0〜1.0）
@@ -55,13 +64,19 @@ class SpaceDebrisApp:
             shutoff_wav_path="assets/sounds/RcsHeavyShutoff.wav"
         )
 
+        self.state = GameState.TITLE # 初期状態はタイトル画面
+
         self._setup_physics()
         self._setup_view()
         self._setup_controls()
 
     def _setup_physics(self):
         """物理エンジンと天体の初期配置"""
-        self.engine = GravityEngine(time_step=TIME_STEP_TU_PHYSICS)
+        self.engine = GravityEngine(
+            time_step=TIME_STEP_TU_PHYSICS,
+            surface_radius_du=EARTH_RADIUS_M * METER_TO_DU,
+            atmosphere_radius_du=ATMOSPHERE_RADIUS_DU
+        )
 
         # 地球
         M_earth = KG_TO_MU * EARTH_MASS_KG
@@ -120,6 +135,92 @@ class SpaceDebrisApp:
         """入力制御系の初期化"""
         self.sas_enabled = False
         self.sas_controller = PIDController(kp=0.5, ki=0.0, kd=5.0)
+    
+    def _handle_playing_events(self, event):
+        """ゲーム本編プレイ中の入力処理"""
+        # ウィンドウリサイズ
+        if event.type == pygame.VIDEORESIZE:                
+            # 新しいサイズのSurfaceを再生成
+            self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+                
+            # 古いSurfaceの参照を，新しいSurfaceで上書きする．
+            if hasattr(self, 'renderer'):
+                self.renderer.screen = self.screen
+            if hasattr(self, 'earth_camera'):
+                self.earth_camera.update_screen_size(self.screen)
+            if hasattr(self, 'tracking_camera'):
+                self.tracking_camera.update_screen_size(self.screen)
+            
+        # --- マウスクリックによるターゲット選択ココカラ ---
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1: # 左クリック
+                mouse_x, mouse_y = event.pos
+
+                for body in reversed(self.engine.bodies): # 後から描画された方を優先
+                    if body.is_fixed: continue
+
+                    screen_x, screen_y = self.renderer.camera.world_to_screen(body.position) # オブジェクトの画面上のピクセル座標
+                    dist = np.hypot(screen_x - mouse_x, screen_y - mouse_y)
+
+                    target_w_px = int(body.real_width_du * self.renderer.camera.pixels_per_du)
+                    target_h_px = int(body.real_height_du * self.renderer.camera.pixels_per_du)
+                    if min(target_w_px, target_h_px) < body.draw_fixed_size_px:
+                        target_r_px = body.draw_fixed_size_px // 2
+                    else:
+                        target_r_px = max(target_w_px, target_h_px) // 2
+
+                    if dist < target_r_px:
+                        self.selected_body = body
+                        self.tracking_camera.set_target_body(body)
+                        break # 先に見つかったbodyが優先
+
+        # --- マウスクリックによるターゲット選択ココマデ ---
+
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_r:
+                self.sas_enabled = not self.sas_enabled
+
+            # カメラの3段階切り替えロジック
+            elif event.key == pygame.K_RSHIFT:
+                if self.view_mode == "EARTH":
+                    self.view_mode = "TRACKING"
+                    self.renderer.camera = self.tracking_camera
+                else:
+                    self.view_mode = "EARTH"
+                    self.renderer.camera = self.earth_camera
+
+            # 早送り係数の操作
+            elif event.key == pygame.K_PERIOD:
+                self.fast_forward_rate = min(1000.0, self.fast_forward_rate * 10.0)
+            elif event.key == pygame.K_COMMA:
+                self.fast_forward_rate = max(1.0, self.fast_forward_rate / 10.0)
+
+            # 捕獲・リリース操作
+            elif event.key == pygame.K_RETURN:
+                if self.capture_state in ['CAPTURING', 'DOCKED']:
+                    if self.capture_state == 'DOCKED':
+                        # リリースして，物理エンジンに再び単体の剛体として戻す．
+                        released_body = self.player_sat.undock()
+                        self.engine.add_body(released_body)
+                        
+                    self.capture_state = 'IDLE'
+                    self.capture_progress = 0.0
+                
+            if type(self.renderer.camera) is EarthCamera:
+                if event.key == pygame.K_RIGHT:
+                    max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / (1.3 * 2.0) # 地球の直径 = 2DU
+                    self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
+                elif event.key == pygame.K_LEFT:
+                    self.renderer.camera.set_pixels_per_du(max(30, self.renderer.camera.get_pixels_per_du() // 2))
+            elif type(self.renderer.camera) is RelativeCamera:
+                if event.key == pygame.K_RIGHT:
+                    target_body = self.renderer.camera.get_target_body()
+                    required_du = 1.2 * np.linalg.norm([target_body.real_width_du, target_body.real_height_du])
+                    max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / required_du
+                    self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
+                elif event.key == pygame.K_LEFT:
+                    self.renderer.camera.set_pixels_per_du(max(PIXELS_PER_DU, self.renderer.camera.get_pixels_per_du() // 2))
 
     def handle_events(self):
         """ユーザー入力の処理"""
@@ -127,89 +228,17 @@ class SpaceDebrisApp:
             if event.type == pygame.QUIT:
                 self.running = False
             
-            # ウィンドウリサイズ
-            elif event.type == pygame.VIDEORESIZE:                
-                # 新しいサイズのSurfaceを再生成
-                self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
-                
-                # 古いSurfaceの参照を，新しいSurfaceで上書きする．
-                if hasattr(self, 'renderer'):
-                    self.renderer.screen = self.screen
-                if hasattr(self, 'earth_camera'):
-                    self.earth_camera.update_screen_size(self.screen)
-                if hasattr(self, 'tracking_camera'):
-                    self.tracking_camera.update_screen_size(self.screen)
+            # 状態ごとの入力処理
+            if self.state == GameState.TITLE:
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE: # スペースキーでゲーム開始
+                    self.state = GameState.PLAYING
+
+            elif self.state == GameState.PLAYING:
+                self._handle_playing_events(event) # ゲーム中の入力処理
             
-            # --- マウスクリックによるターゲット選択ココカラ ---
-
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1: # 左クリック
-                    mouse_x, mouse_y = event.pos
-
-                    for body in reversed(self.engine.bodies): # 後から描画された方を優先
-                        if body.is_fixed: continue
-
-                        screen_x, screen_y = self.renderer.camera.world_to_screen(body.position) # オブジェクトの画面上のピクセル座標
-                        dist = np.hypot(screen_x - mouse_x, screen_y - mouse_y)
-
-                        target_w_px = int(body.real_width_du * self.renderer.camera.pixels_per_du)
-                        target_h_px = int(body.real_height_du * self.renderer.camera.pixels_per_du)
-                        if min(target_w_px, target_h_px) < body.draw_fixed_size_px:
-                            target_r_px = body.draw_fixed_size_px // 2
-                        else:
-                            target_r_px = max(target_w_px, target_h_px) // 2
-
-                        if dist < target_r_px:
-                            self.selected_body = body
-                            self.tracking_camera.set_target_body(body)
-                            break # 先に見つかったbodyが優先
-
-            # --- マウスクリックによるターゲット選択ココマデ ---
-
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r:
-                    self.sas_enabled = not self.sas_enabled
-
-                # カメラの3段階切り替えロジック
-                elif event.key == pygame.K_RSHIFT:
-                    if self.view_mode == "EARTH":
-                        self.view_mode = "TRACKING"
-                        self.renderer.camera = self.tracking_camera
-                    else:
-                        self.view_mode = "EARTH"
-                        self.renderer.camera = self.earth_camera
-
-                # 早送り係数の操作
-                elif event.key == pygame.K_PERIOD:
-                    self.fast_forward_rate = min(1000.0, self.fast_forward_rate * 10.0)
-                elif event.key == pygame.K_COMMA:
-                    self.fast_forward_rate = max(1.0, self.fast_forward_rate / 10.0)
-
-                # 捕獲・リリース操作
-                elif event.key == pygame.K_RETURN:
-                    if self.capture_state in ['CAPTURING', 'DOCKED']:
-                        if self.capture_state == 'DOCKED':
-                            # リリースして，物理エンジンに再び単体の剛体として戻す．
-                            released_body = self.player_sat.undock()
-                            self.engine.add_body(released_body)
-                        
-                        self.capture_state = 'IDLE'
-                        self.capture_progress = 0.0
-                
-                if type(self.renderer.camera) is EarthCamera:
-                    if event.key == pygame.K_RIGHT:
-                        max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / (1.3 * 2.0) # 地球の直径 = 2DU
-                        self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
-                    elif event.key == pygame.K_LEFT:
-                        self.renderer.camera.set_pixels_per_du(max(30, self.renderer.camera.get_pixels_per_du() // 2))
-                elif type(self.renderer.camera) is RelativeCamera:
-                    if event.key == pygame.K_RIGHT:
-                        target_body = self.renderer.camera.get_target_body()
-                        required_du = 1.2 * np.linalg.norm([target_body.real_width_du, target_body.real_height_du])
-                        max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / required_du
-                        self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
-                    elif event.key == pygame.K_LEFT:
-                        self.renderer.camera.set_pixels_per_du(max(PIXELS_PER_DU, self.renderer.camera.get_pixels_per_du() // 2))
+            elif self.state in (GameState.CLEAR, GameState.GAMEOVER):
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_r: # Rキーでリスタート
+                    self._reset_game()
         
         keys = pygame.key.get_pressed()
 
@@ -317,9 +346,11 @@ class SpaceDebrisApp:
             return mask.get_at((local_x_px, local_y_px)) != 0
 
         return False
-
-    def update(self, dt_real_sec: float):
+    
+    def _update_playing(self, dt_real_sec: float):
         """
+        ゲーム本編プレイ中の更新処理を行う．
+
         Args:
             dt_real_sec (float): 前フレームから経過した現実の時間（秒）
         """
@@ -329,9 +360,10 @@ class SpaceDebrisApp:
             current_physics_dt_tu = TIME_STEP_TU_PHYSICS * 10**(int(np.log10(self.fast_forward_rate)) - 2)
         else:
             current_physics_dt_tu = TIME_STEP_TU_PHYSICS
+        
+        self.engine.set_time_step(current_physics_dt_tu) # エンジン内部の時間幅を動的に書き換える．
 
         while self.time_accumulator >= current_physics_dt_tu:
-            self.engine.set_time_step(current_physics_dt_tu) # エンジン内部の時間幅を動的に書き換える．
             self._apply_control_forces(dt_tu=current_physics_dt_tu) # ユーザによる並進・回転入力の評価
 
             events = self.engine.step()
@@ -384,14 +416,51 @@ class SpaceDebrisApp:
         # 軌道予測は重いため，1フレームに1回だけ実行する．
         self.orbital_predictions = self.engine.predict_trajectories(future_duration=30.0, dt_prediction=0.05)
 
+    def update(self, dt_real_sec: float):
+        """
+        ゲーム状態に応じた更新処理を行う．
+
+        Args:
+            dt_real_sec (float): 前フレームから経過した現実の時間（秒）
+        """
+        if self.state == GameState.TITLE:
+            pass
+        elif self.state == GameState.PLAYING:
+            self._update_playing(dt_real_sec) # ゲーム本編プレイ中の更新処理
+            self._check_win_loss_condition() # 勝敗判定
+        elif self.state in (GameState.CLEAR, GameState.GAMEOVER):
+            self.fast_forward_rate = 10.0
+            self._update_playing(dt_real_sec) # ゲーム本編プレイ中の更新処理を流用
+    
+    def _check_win_loss_condition(self):
+        """ゲームの終了条件を監視"""
+        ATMOSPHERE_RADIUS_M = EARTH_RADIUS_M + 100e3 # 空力加熱を起こし始める高度（m）
+        ATMOSPHERE_RADIUS_DU = ATMOSPHERE_RADIUS_M * METER_TO_DU
+
+        # 勝利条件：ドッキングしている and プレイヤーとターゲットが大気圏突入
+        # 勝利条件：ドッキングしていない and (任意のデブリが突入済み or 突入見込み) and (プレイヤーが突入済み or 突入見込み)．プレイヤーが先に突入してもよい．
+        # ↑2つの勝利条件は結合できると思う．ドッキング状態に依存しない．
+        # 敗北条件：燃料がゼロ and プレイヤーの突入見込み無し
+        # 敗北条件：(デブリが1機も突入していない or 突入見込み無し) and プレイヤーが突入済み
+
     def render(self):
         """画面の描画"""
         self.renderer.clear()
         self.renderer.draw_starry_sky(simulation_time=self.simulation_time)
         self.renderer.draw_predictions(self.orbital_predictions, player=self.player_sat, selected_body=self.selected_body)
         self.renderer.draw_bodies(bodies=self.engine.bodies, selected_body=self.selected_body)
-        self.renderer.draw_ui(self.player_sat, self.selected_body, self.sas_enabled, self.throttle, self.player_torque,
-                              self.mission_start_time, self.simulation_time, self.fast_forward_rate, self.capture_state, self.capture_progress)
+        
+        # ゲーム状態に応じたUIを上塗り
+        if self.state == GameState.TITLE:
+            self.renderer.draw_overlay("SPACE DEBRIS CLEANER", "Press SPACE to Start", (50, 150, 255))
+        elif self.state == GameState.PLAYING:
+            self.renderer.draw_ui(self.player_sat, self.selected_body, self.sas_enabled, self.throttle, self.player_torque,
+                                  self.mission_start_time, self.simulation_time, self.fast_forward_rate, self.capture_state, self.capture_progress)
+        elif self.state == GameState.CLEAR:
+            self.renderer.draw_overlay("MISSION SUCCESS", "Target De-orbited! Press 'R' to Restart.", (100, 255, 100))
+        elif self.state == GameState.GAMEOVER:
+            self.renderer.draw_overlay("MISSION FAILED", "Press 'R' to Restart.", (255, 50, 50))
+
         pygame.display.flip()
 
     def run(self):

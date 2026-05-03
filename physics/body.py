@@ -86,6 +86,8 @@ class RigidBody:
             self.fuel_consumption_rate = 1.0 / exhaust_velocity_cano
         else:
             self.fuel_consumption_rate = 0.0
+        
+        self.is_active_for_prediction = True
 
     def apply_local_force(self, force_local_x: float, force_local_y: float, total_force_mag: float, dt: float) -> None:
         """

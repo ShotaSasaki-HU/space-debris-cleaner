@@ -22,7 +22,7 @@ class GravityEngine:
     物理シミュレーションのルールを司るエンジンクラス．
     速度ベルレ法を用いて，管理下にある全剛体の状態（位置・速度・加速度）を更新する．
     """
-    def __init__(self, time_step: float):
+    def __init__(self, time_step: float, surface_radius_du: float, atmosphere_radius_du: float):
         """
         Args:
             time_step (float): 1ステップで進める時間 dt (TU)
@@ -31,6 +31,9 @@ class GravityEngine:
         self.bodies: List[RigidBody] = []
 
         self.restitution_coefficient = 0.6 # 反発係数
+
+        self.surface_radius_du: float = surface_radius_du
+        self.atmosphere_radius_du: float = atmosphere_radius_du
 
     def add_body(self, body: RigidBody) -> None:
         """シミュレーション空間に剛体を追加"""
@@ -136,6 +139,7 @@ class GravityEngine:
                 body.acceleration.fill(0.0)
                 body.angular_acceleration = 0.0
 
+        # 万有引力
         n = len(target_bodies)
         for i in range(n):
             if target_bodies[i].is_fixed: continue
@@ -150,6 +154,33 @@ class GravityEngine:
                 acc_mag = target_bodies[j].mass / distance_sq # 万有引力による加速度の大きさ
                 unit_r_vec = r_vec / np.sqrt(distance_sq) # 単位位置ベクトル
                 target_bodies[i].acceleration += acc_mag * unit_r_vec
+        
+        # 大気抵抗
+        self._apply_aerodynamic_drag(target_bodies, self.surface_radius_du, self.atmosphere_radius_du)
+    
+    def _apply_aerodynamic_drag(self, target_bodies: List[RigidBody], surface_radius_du: float, atmosphere_radius_du: float):
+        """
+        大気圏内の物体に大気抵抗を適用する．
+        """
+        for body in target_bodies:
+            if body.is_fixed: continue
+            
+            r_mag = np.linalg.norm(body.position)
+            if r_mag < atmosphere_radius_du:
+                v_mag = np.linalg.norm(body.velocity)
+                if v_mag > 0:
+                    # 高度に基づく簡易大気密度ファクター（地表：1.0 〜 大気圏の境界：0.0）
+                    body_alt_du = r_mag - surface_radius_du
+                    atmosphere_alt_du = atmosphere_radius_du - surface_radius_du
+                    density_factor = max(0.0, 1.0 - (body_alt_du / atmosphere_alt_du))
+                    
+                    # 速度の2乗に比例して強くなる抵抗力による加速度
+                    # ※ 係数はゲーム的なチューニング値である．必要に応じて増減させる．
+                    # カノニカル単位系により極小になっている質量で力を割ると，値が爆発してフリーズしやすい．よって，係数にまとめて委ねている．
+                    drag_acc_mag = density_factor * (v_mag ** 2) * 0.5
+                    drag_dir = -body.velocity / v_mag
+                    
+                    body.acceleration += drag_dir * drag_acc_mag
 
     def _step_bodies(self, target_bodies: List[RigidBody], dt: float, includes_collision: bool) -> List[CollisionEvent]:
         """
@@ -204,6 +235,10 @@ class GravityEngine:
         """
         # 現在の状態を「仮想宇宙」にディープコピーする．これにより，ゲーム本体の状態を汚さずに計算できる．
         temp_bodies = copy.deepcopy(self.bodies)
+
+        # 予測開始時はすべて予測をアクティブにセット
+        for tb in temp_bodies:
+            tb.is_active_for_prediction = True
         
         # 結果を格納する辞書（天体ごとに位置リストを持つ．）
         # id()を使って個々のRigidBodyを識別
@@ -216,10 +251,30 @@ class GravityEngine:
 
         # 仮想宇宙でのシミュレーションループ
         for _ in range(steps):
-            self._step_bodies(temp_bodies, dt_prediction, includes_collision=False)
+            # まだ生きている（地表に到達していない）剛体だけを抽出して計算を進める
+            active_temp_bodies = [b for b in temp_bodies if b.is_active_for_prediction]
+            
+            # 生き残りがゼロなら予測ループを早期終了
+            if not active_temp_bodies:
+                break
+
+            self._step_bodies(active_temp_bodies, dt_prediction, includes_collision=False)
 
             for orig_body, temp_body in zip(self.bodies, temp_bodies): # 2つのリストの順番が完全に一致している前提
-                if not orig_body.is_fixed:
+                if orig_body.is_fixed:
+                    continue
+                    
+                # すでに地表に到達して計算から除外されている場合はスキップ
+                if not getattr(temp_body, 'is_active_for_prediction', True):
+                    continue
+
+                # 地表（＋わずかな猶予）を下回ったかチェック
+                if np.linalg.norm(temp_body.position) <= self.surface_radius_du + 0.001:
+                    temp_body.is_active_for_prediction = False # 次のステップから除外
+                    # 最後に地表スレスレの座標を記録して終了
+                    norm_pos = temp_body.position / np.linalg.norm(temp_body.position)
+                    predictions[id(orig_body)].append(norm_pos * self.surface_radius_du)
+                else:
                     # 現実の剛体のIDをキーにして，未来の剛体の位置を記録する．
                     predictions[id(orig_body)].append(temp_body.position.copy())
   

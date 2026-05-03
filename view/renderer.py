@@ -9,7 +9,7 @@ from skyfield.data import hipparcos
 from physics.body import RigidBody
 from view.camera import Camera, EarthCamera, RelativeCamera
 from physics.constants import (
-    METER_TO_DU, SEC_TO_TU, TU_TO_SEC, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL, KG_TO_MU, EARTH_RADIUS_M
+    METER_TO_DU, SEC_TO_TU, TU_TO_SEC, MAX_THRUST_NEWTON, MAX_TORQUE_NM, NM_TO_CANONICAL, KG_TO_MU, EARTH_RADIUS_M, ATMOSPHERE_RADIUS_DU
 )
 
 COLOR_EARTH = (50, 150, 255)
@@ -26,9 +26,12 @@ class GameRenderer:
         self.screen = screen
         self.camera = camera
         self.image_cache: Dict[str, pygame.Surface] = {}
-        self.font = pygame.font.SysFont("couriernew", 20)
         self.prediction_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
         self.scaled_cache: Dict[str, tuple[int, int, pygame.Surface]] = {}
+
+        self.font = pygame.font.SysFont("couriernew", 20)
+        self.font_large = pygame.font.SysFont("couriernew", 64, bold=True)
+        self.font_mid = pygame.font.SysFont("couriernew", 32)
 
         self._setup_starry_sky()
 
@@ -126,6 +129,49 @@ class GameRenderer:
                 if not is_on_screen: return
 
                 # --- カリングココマデ ---
+
+                # --- 空力加熱エフェクトココカラ ---
+
+                r_mag = np.linalg.norm(body.position)
+
+                if r_mag < ATMOSPHERE_RADIUS_DU:
+                    v_mag = np.linalg.norm(body.velocity)
+                    if v_mag > 0.05: # ある程度の速度がある時だけ燃える
+                        # 速度ベクトルと逆向きに炎を描画する
+                        vel_dir = -body.velocity / v_mag
+                        # 画面座標系での向きに変換
+                        if isinstance(self.camera, EarthCamera):
+                            dir_x = vel_dir[0]
+                            dir_y = -vel_dir[1]
+                        else: # RelativeCameraの場合の回転補正
+                            theta = np.atan2(self.camera.target_body.position[1], self.camera.target_body.position[0])
+                            rot_angle = (np.pi / 2.0) - theta
+                            dir_x = vel_dir[0] * np.cos(rot_angle) - vel_dir[1] * np.sin(rot_angle)
+                            dir_y = -(vel_dir[0] * np.sin(rot_angle) + vel_dir[1] * np.cos(rot_angle))
+                
+                        # 炎の大きさと色（高度が低く，速度が速いほど強くなる．）
+                        surface_radius_du = EARTH_RADIUS_M * METER_TO_DU
+                        body_alt_du = r_mag - surface_radius_du
+                        atmosphere_alt_du = ATMOSPHERE_RADIUS_DU - surface_radius_du
+                        
+                        alt_factor = max(0.0, 1.0 - (body_alt_du / atmosphere_alt_du))
+                        intensity = min(1.0, alt_factor * (v_mag * 10.0))
+                
+                        flame_length = int(50 * intensity + 20)
+                        flame_width = int(30 * intensity + 10)
+                
+                        # プラズマのポリゴン（涙滴型）を計算
+                        tip_px = (body_pos_px[0] + dir_x * flame_length, body_pos_px[1] + dir_y * flame_length)
+                        left_px = (body_pos_px[0] - dir_y * flame_width, body_pos_px[1] + dir_x * flame_width)
+                        right_px = (body_pos_px[0] + dir_y * flame_width, body_pos_px[1] - dir_x * flame_width)
+                
+                        # 半透明のオレンジ〜赤で描画
+                        flame_color = (255, int(150 * (1.0 - intensity)), 0, 150)
+                        flame_surf = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+                        pygame.draw.polygon(flame_surf, flame_color, [body_pos_px, left_px, tip_px, right_px])
+                        self.screen.blit(flame_surf, (0, 0))
+
+                # --- 空力加熱エフェクトココマデ ---
 
                 # --- スケーリングのキャッシュココカラ ---
 
@@ -945,3 +991,26 @@ class GameRenderer:
             # 値（ラベルの右側に色付きで配置）
             val_surf = self.font.render(val, True, color)
             self.screen.blit(val_surf, (start_x + 90, y))
+    
+    def draw_overlay(self, title_text: str, sub_text: str, title_color: tuple):
+        """画面全体に半透明の黒背景とテキストを描画"""
+        screen_w = self.screen.get_width()
+        screen_h = self.screen.get_height()
+
+        center_x = screen_w // 2
+        center_y = screen_h // 2
+        
+        # 半透明の黒フィルター
+        overlay = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180)) # アルファ値180で暗くする．
+        self.screen.blit(overlay, (0, 0))
+        
+        # タイトルテキスト
+        title_surf = self.font_large.render(title_text, True, title_color)
+        title_rect = title_surf.get_rect(center=(center_x, center_y - 50))
+        self.screen.blit(title_surf, title_rect.topleft)
+        
+        # サブテキスト
+        sub_surf = self.font_mid.render(sub_text, True, COLOR_UI_TEXT)
+        sub_rect = sub_surf.get_rect(center=(center_x, center_y + 50))
+        self.screen.blit(sub_surf, sub_rect.topleft)
