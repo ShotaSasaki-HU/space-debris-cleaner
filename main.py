@@ -43,29 +43,33 @@ class SpaceDebrisApp:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        self.throttle = 1.0 # スロットル100%
-        self.player_torque = 0.0
-
-        self.fast_forward_rate = 1.0 # 早送り倍率
-        self.time_accumulator = 0.0 # 未処理のシミュレーション時間を貯めるバケツ
-
-        self.simulation_time = datetime.now(timezone.utc) # ゲーム内の時刻（物理演算には関係しない．）
-        self.mission_start_time = self.simulation_time
-
-        self.orbital_predictions: dict = {}
-
-        # 捕獲システムのステートマシンと変数
-        self.capture_state = 'IDLE' # 'IDLE', 'CAPTURING', 'DOCKED'
-        self.capture_progress = 0.0 # 捕獲の進捗（0.0〜1.0）
-        self.capture_time_required_sec = 10.0 # 捕獲完了に必要な継続接触時間（秒）
-
         self.thruster_audio = ThrusterAudioManager(
             loop_wav_path="assets/sounds/RcsHeavy.wav",
             shutoff_wav_path="assets/sounds/RcsHeavyShutoff.wav"
         )
 
-        self.state = GameState.TITLE # 初期状態はタイトル画面
+        self.capture_time_required_sec = 10.0 # 捕獲完了に必要な継続接触時間（秒）
 
+        self._reset_game() # 動的なステートの初期化
+        self.state = GameState.TITLE # 初期状態はタイトル画面
+    
+    def _reset_game(self):
+        self.throttle = 1.0 # スロットル100%
+        self.player_torque = 0.0
+        self.fast_forward_rate = 1.0 # 早送り倍率
+        self.time_accumulator = 0.0 # 未処理のシミュレーション時間を貯めるバケツ
+        self.simulation_time = datetime.now(timezone.utc) # ゲーム内の時刻（物理演算には関係しない．）
+        self.mission_start_time = self.simulation_time
+        self.orbital_predictions: dict = {}
+
+        # 捕獲システムのステートマシンと変数
+        self.capture_state = 'IDLE' # 'IDLE', 'CAPTURING', 'DOCKED'
+        self.capture_progress = 0.0 # 捕獲の進捗（0.0〜1.0）
+
+        # リセット処理（Rキー）が呼ばれたら，即座にプレイ画面から再開する．
+        self.state = GameState.PLAYING
+
+        # 各モジュールを新しいインスタンスで上書きして初期化
         self._setup_physics()
         self._setup_view()
         self._setup_controls()
