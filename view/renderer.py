@@ -130,49 +130,6 @@ class GameRenderer:
 
                 # --- カリングココマデ ---
 
-                # --- 空力加熱エフェクトココカラ ---
-
-                r_mag = np.linalg.norm(body.position)
-
-                if r_mag < ATMOSPHERE_RADIUS_DU:
-                    v_mag = np.linalg.norm(body.velocity)
-                    if v_mag > 0.05: # ある程度の速度がある時だけ燃える
-                        # 速度ベクトルと逆向きに炎を描画する
-                        vel_dir = -body.velocity / v_mag
-                        # 画面座標系での向きに変換
-                        if isinstance(self.camera, EarthCamera):
-                            dir_x = vel_dir[0]
-                            dir_y = -vel_dir[1]
-                        else: # RelativeCameraの場合の回転補正
-                            theta = np.atan2(self.camera.target_body.position[1], self.camera.target_body.position[0])
-                            rot_angle = (np.pi / 2.0) - theta
-                            dir_x = vel_dir[0] * np.cos(rot_angle) - vel_dir[1] * np.sin(rot_angle)
-                            dir_y = -(vel_dir[0] * np.sin(rot_angle) + vel_dir[1] * np.cos(rot_angle))
-                
-                        # 炎の大きさと色（高度が低く，速度が速いほど強くなる．）
-                        surface_radius_du = EARTH_RADIUS_M * METER_TO_DU
-                        body_alt_du = r_mag - surface_radius_du
-                        atmosphere_alt_du = ATMOSPHERE_RADIUS_DU - surface_radius_du
-                        
-                        alt_factor = max(0.0, 1.0 - (body_alt_du / atmosphere_alt_du))
-                        intensity = min(1.0, alt_factor * (v_mag * 10.0))
-                
-                        flame_length = int(50 * intensity + 20)
-                        flame_width = int(30 * intensity + 10)
-                
-                        # プラズマのポリゴン（涙滴型）を計算
-                        tip_px = (body_pos_px[0] + dir_x * flame_length, body_pos_px[1] + dir_y * flame_length)
-                        left_px = (body_pos_px[0] - dir_y * flame_width, body_pos_px[1] + dir_x * flame_width)
-                        right_px = (body_pos_px[0] + dir_y * flame_width, body_pos_px[1] - dir_x * flame_width)
-                
-                        # 半透明のオレンジ〜赤で描画
-                        flame_color = (255, int(150 * (1.0 - intensity)), 0, 150)
-                        flame_surf = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
-                        pygame.draw.polygon(flame_surf, flame_color, [body_pos_px, left_px, tip_px, right_px])
-                        self.screen.blit(flame_surf, (0, 0))
-
-                # --- 空力加熱エフェクトココマデ ---
-
                 # --- スケーリングのキャッシュココカラ ---
 
                 cache_key = body.image_path
@@ -231,9 +188,76 @@ class GameRenderer:
                     docked.position = orig_pos
                     docked.angle = orig_angle
                 
+                # --- 空力加熱エフェクトココカラ ---
+
+                opaque_mask = pygame.mask.from_surface(rotated_image) # 画像の非透過部分からマスクを生成
+
+                r_mag = np.linalg.norm(body.position)
+                if r_mag < ATMOSPHERE_RADIUS_DU:
+                    v_mag = np.linalg.norm(body.velocity)
+                    if v_mag > 0.05: # ある程度の速度がある時だけ燃える
+                        vel_dir = -body.velocity / v_mag
+                        
+                        if isinstance(self.camera, EarthCamera):
+                            dir_x, dir_y = vel_dir[0], -vel_dir[1]
+                        else:
+                            theta = np.atan2(self.camera.target_body.position[1], self.camera.target_body.position[0])
+                            rot_angle = (np.pi / 2.0) - theta
+                            dir_x = vel_dir[0] * np.cos(rot_angle) - vel_dir[1] * np.sin(rot_angle)
+                            dir_y = -(vel_dir[0] * np.sin(rot_angle) + vel_dir[1] * np.cos(rot_angle))
+                        
+                        surface_radius_du = EARTH_RADIUS_M * METER_TO_DU
+                        body_alt_du = r_mag - surface_radius_du
+                        atmosphere_alt_du = ATMOSPHERE_RADIUS_DU - surface_radius_du
+                        
+                        alt_factor = max(0.0, 1.0 - (body_alt_du / atmosphere_alt_du))
+                        intensity = min(1.0, alt_factor * (v_mag * 5.0)) # 燃焼強度: 0.0 - 1.0
+
+                        # エフェクト1：バウショック（前面に張り付くプラズマの壁）
+                        # dir_x, y は「進行方向の逆（尾を引く方向）」なので，マイナスをかけて進行方向へズラす．
+                        bow_color = (255, 200, 50, int(200 * intensity))
+                        bow_surf = opaque_mask.to_surface(setcolor=bow_color, unsetcolor=(0, 0, 0, 0))
+                        self.screen.blit(bow_surf, (draw_pos[0] - dir_x * (5 * intensity), draw_pos[1] - dir_y * (5 * intensity)))
+
+                        # エフェクト2：プラズマの尾（シルエットの後方スタンプ）
+                        trail_steps = 3
+                        for i in range(1, trail_steps + 1):
+                            trail_alpha = int((150 * intensity) / i)
+                            trail_color = (255, max(0, 100 - i*30), 0, trail_alpha)
+                            trail_surf = opaque_mask.to_surface(setcolor=trail_color, unsetcolor=(0, 0, 0, 0))
+                            
+                            tx = dir_x * (10 * i * intensity)
+                            ty = dir_y * (10 * i * intensity)
+                            self.screen.blit(trail_surf, (draw_pos[0] + tx, draw_pos[1] + ty))
+
+                        # エフェクト3：高熱のスパーク（輪郭からの炎の筋）
+                        outline = opaque_mask.outline()
+                        if len(outline) > 0:
+                            flame_length = 80 * intensity
+                            flame_surf = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+                            
+                            # 描画負荷を下げるため，輪郭点を間引く．（30本程度に制限）
+                            step = max(1, len(outline) // 30)
+                            for p in outline[::step]:
+                                sx = p[0] + draw_pos[0]
+                                sy = p[1] + draw_pos[1]
+                                
+                                # ランダムな長さと揺らぎ
+                                flicker = np.random.uniform(0.3, 1.2)
+                                ex = sx + dir_x * flame_length * flicker
+                                ey = sy + dir_y * flame_length * flicker
+                                
+                                # 根元は太く黄色，先端は細く赤く．
+                                pygame.draw.line(flame_surf, (255, 200, 0, int(200*intensity)), (sx, sy), (sx + dir_x*flame_length*0.2, sy + dir_y*flame_length*0.2), 3)
+                                pygame.draw.line(flame_surf, (255, 50, 0, int(100*intensity)), (sx + dir_x*flame_length*0.2, sy + dir_y*flame_length*0.2), (ex, ey), 1)
+                                
+                            self.screen.blit(flame_surf, (0, 0))
+
+                # --- 空力加熱エフェクトココマデ ---
+                
                 # 選択されているbodyの縁取り
                 if is_selected:
-                    opaque_mask = pygame.mask.from_surface(rotated_image) # 画像の非透過部分からマスクを生成
+                    # opaque_maskは，空力加熱エフェクトが既に作っているので再生成の必要無し．
                     outline = opaque_mask.outline() # マスクの輪郭座標リスト
                     if len(outline) >= 2:
                         # 輪郭座標は画像の左上が原点なので，画面描画座標 (draw_pos) にオフセットを加算する．
