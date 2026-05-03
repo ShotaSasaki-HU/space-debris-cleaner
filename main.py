@@ -138,22 +138,10 @@ class SpaceDebrisApp:
     
     def _handle_playing_events(self, event):
         """ゲーム本編プレイ中の入力処理"""
-        # ウィンドウリサイズ
-        if event.type == pygame.VIDEORESIZE:                
-            # 新しいサイズのSurfaceを再生成
-            self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
-                
-            # 古いSurfaceの参照を，新しいSurfaceで上書きする．
-            if hasattr(self, 'renderer'):
-                self.renderer.screen = self.screen
-            if hasattr(self, 'earth_camera'):
-                self.earth_camera.update_screen_size(self.screen)
-            if hasattr(self, 'tracking_camera'):
-                self.tracking_camera.update_screen_size(self.screen)
-            
+
         # --- マウスクリックによるターゲット選択ココカラ ---
 
-        elif event.type == pygame.MOUSEBUTTONDOWN:
+        if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1: # 左クリック
                 mouse_x, mouse_y = event.pos
 
@@ -225,10 +213,29 @@ class SpaceDebrisApp:
     def handle_events(self):
         """ユーザー入力の処理"""
         for event in pygame.event.get():
+
+            # --- システムレベルのイベント（全ステート共通）ココカラ ---
+
             if event.type == pygame.QUIT:
                 self.running = False
             
-            # 状態ごとの入力処理
+            # ウィンドウリサイズ
+            elif event.type == pygame.VIDEORESIZE:                
+                # 新しいサイズのSurfaceを再生成
+                self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+                
+                # 古いSurfaceの参照を，新しいSurfaceで上書きする．
+                if hasattr(self, 'renderer'):
+                    self.renderer.screen = self.screen
+                if hasattr(self, 'earth_camera'):
+                    self.earth_camera.update_screen_size(self.screen)
+                if hasattr(self, 'tracking_camera'):
+                    self.tracking_camera.update_screen_size(self.screen)
+            
+            # --- システムレベルのイベント（全ステート共通）ココマデ ---
+            
+            # --- 状態ごとの入力処理ココカラ ---
+
             if self.state == GameState.TITLE:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE: # スペースキーでゲーム開始
                     self.state = GameState.PLAYING
@@ -239,6 +246,8 @@ class SpaceDebrisApp:
             elif self.state in (GameState.CLEAR, GameState.GAMEOVER):
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_r: # Rキーでリスタート
                     self._reset_game()
+            
+            # --- 状態ごとの入力処理ココマデ ---
         
         keys = pygame.key.get_pressed()
 
