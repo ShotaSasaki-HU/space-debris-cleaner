@@ -542,6 +542,10 @@ class SpaceDebrisApp:
 
             self.fast_forward_rate = 10.0
 
+            # スラスターの音を確実に停止
+            for k_i in ['K_w', 'K_s', 'K_a', 'K_d']:
+                self.thruster_audio.update_thruster(thruster_id=k_i, is_firing=False)
+
     def render(self):
         """画面の描画"""
         self.renderer.clear()
