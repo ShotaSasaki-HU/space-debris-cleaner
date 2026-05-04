@@ -1016,7 +1016,7 @@ class GameRenderer:
             val_surf = self.font.render(val, True, color)
             self.screen.blit(val_surf, (start_x + 90, y))
     
-    def draw_overlay(self, title_text: str, sub_text: str, title_color: tuple):
+    def draw_overlay(self, title_text: str, sub_text: str, title_color: tuple, bg_alpha: int = 180):
         """画面全体に半透明の黒背景とテキストを描画"""
         screen_w = self.screen.get_width()
         screen_h = self.screen.get_height()
@@ -1026,7 +1026,7 @@ class GameRenderer:
         
         # 半透明の黒フィルター
         overlay = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180)) # アルファ値180で暗くする．
+        overlay.fill((0, 0, 0, bg_alpha)) # アルファ値180で暗くする．
         self.screen.blit(overlay, (0, 0))
         
         # タイトルテキスト

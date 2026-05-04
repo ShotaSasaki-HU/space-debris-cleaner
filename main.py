@@ -66,8 +66,11 @@ class SpaceDebrisApp:
         self.capture_state = 'IDLE' # 'IDLE', 'CAPTURING', 'DOCKED'
         self.capture_progress = 0.0 # 捕獲の進捗（0.0〜1.0）
 
-        # リセット処理（Rキー）が呼ばれたら，即座にプレイ画面から再開する．
-        self.state = GameState.PLAYING
+        self.state = GameState.PLAYING # リセット処理（Rキー）が呼ばれたら，即座にプレイ画面から再開する．
+        self.end_reason = "" # ゲーム終了理由のテキスト
+        self.is_cinematic_mode = False # 燃え尽きるまで見届けるモードか否か
+        self.doomed_debri = None # 再突入が確定したデブリのインスタンス
+        self.deorbited_debris_count = 0 # 消滅済みのデブリ数（実績）
 
         # 各モジュールを新しいインスタンスで上書きして初期化
         self._setup_physics()
@@ -241,14 +244,14 @@ class SpaceDebrisApp:
             # --- 状態ごとの入力処理ココカラ ---
 
             if self.state == GameState.TITLE:
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE: # スペースキーでゲーム開始
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE: # ゲーム開始
                     self.state = GameState.PLAYING
 
             elif self.state == GameState.PLAYING:
                 self._handle_playing_events(event) # ゲーム中の入力処理
             
             elif self.state in (GameState.CLEAR, GameState.GAMEOVER):
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_r: # Rキーでリスタート
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE: # リスタート
                     self._reset_game()
             
             # --- 状態ごとの入力処理ココマデ ---
@@ -381,8 +384,15 @@ class SpaceDebrisApp:
 
             events = self.engine.step()
             for event in events:
-                if event.body1_destroyed: self.engine.remove_body(event.body1)
-                if event.body2_destroyed: self.engine.remove_body(event.body2)
+                if event.body1_destroyed and (event.body1 in self.engine.bodies):
+                    self.engine.remove_body(event.body1)
+                    if (event.body1 not in (self.player_sat, self.earth)) and (event.body2 == self.earth):
+                        self.deorbited_debris_count += 1
+
+                if event.body2_destroyed and (event.body2 in self.engine.bodies):
+                    self.engine.remove_body(event.body2)
+                    if (event.body2 not in (self.player_sat, self.earth)) and (event.body1 == self.earth):
+                        self.deorbited_debris_count += 1
             
             # --- 捕獲判定ココカラ ---
 
@@ -447,9 +457,10 @@ class SpaceDebrisApp:
     
     def _check_win_loss_condition(self):
         """ゲームの終了条件を監視"""
-        # doomed: 消える運命にある
-        player_doomed = False
-        debris_doomed = False
+        if self.state != GameState.PLAYING: return
+
+        player_doomed = False # doomed: 消える運命にある
+        debris_doomed = (self.deorbited_debris_count > 0) # 既に落としたデブリがあれば，その時点でデブリ側の条件はクリアとする．
 
         # 予測軌道から「大気圏に突入する運命にあるか」を判定
         for body_id, path in self.orbital_predictions.items():
@@ -467,6 +478,7 @@ class SpaceDebrisApp:
                     player_doomed = True
                 else:
                     debris_doomed = True
+                    self.doomed_debri = next((b for b in self.engine.bodies if id(b) == body_id), None)
         
         # ドッキング中なら，プレイヤーの運命＝デブリの運命として扱う．
         if (self.capture_state == 'DOCKED') and player_doomed:
@@ -484,17 +496,30 @@ class SpaceDebrisApp:
         # 成功条件：デブリとプレイヤー双方が突入見込み（予測線で確定）
         if debris_doomed and player_doomed:
             self.state = GameState.CLEAR
+            self.end_reason = "Re-entry trajectory confirmed!"
+            self.is_cinematic_mode = True # 燃え尽きるまで見せるモードON
             return
         
-        # 失敗条件1：プレイヤーが地表に激突して物理的に破壊された（燃料が残っていても死）
-        # 上のCLEAR条件をすり抜けてここに来た＝デブリを落とせていないのに自分が死んだ
+        # 失敗条件：プレイヤーが地表に激突して物理的に破壊された（燃料が残っていても死）
+        # 成功条件をすり抜けているため，後からデブリが大気圏突入する可能性も無い．
         if is_player_crashed:
             self.state = GameState.GAMEOVER
+            self.end_reason = "Hull destroyed on impact with Earth’s surface."
+            self.is_cinematic_mode = False
             return
         
-        # 失敗条件2：燃料がゼロになった時点で，CLEAR条件を満たしていないなら全て失敗．
+        # 失敗条件
+        if (not debris_doomed) and ((self.player_sat.propellant_mass <= 0.0) and player_doomed):
+            self.state = GameState.GAMEOVER
+            self.end_reason = "Fatal trajectory. Target not removed."
+            self.is_cinematic_mode = True # 燃え尽きるまで見せるモードON
+            return
+        
+        # 失敗条件：燃料がゼロになった時点で，CLEAR条件を満たしていないなら全て失敗．
         if self.player_sat.propellant_mass <= 0.0:
             self.state = GameState.GAMEOVER
+            self.end_reason = "Out of propellant. Stranded in orbit."
+            self.is_cinematic_mode = False # 永遠に軌道を回り続けるので即座にリザルトへ
             return
 
         # --- 成否のステートマシンココマデ ---
@@ -508,14 +533,32 @@ class SpaceDebrisApp:
         
         # ゲーム状態に応じたUIを上塗り
         if self.state == GameState.TITLE:
-            self.renderer.draw_overlay("SPACE DEBRIS CLEANER", "Press SPACE to Start", (50, 150, 255))
+            self.renderer.draw_overlay("SPACE DEBRIS CLEANER", "Press 'SPACE' to start.", (50, 150, 255))
         elif self.state == GameState.PLAYING:
             self.renderer.draw_ui(self.player_sat, self.selected_body, self.sas_enabled, self.throttle, self.player_torque,
                                   self.mission_start_time, self.simulation_time, self.fast_forward_rate, self.capture_state, self.capture_progress)
-        elif self.state == GameState.CLEAR:
-            self.renderer.draw_overlay("MISSION SUCCESS", "Target De-orbited! Press 'R' to Restart.", (100, 255, 100))
-        elif self.state == GameState.GAMEOVER:
-            self.renderer.draw_overlay("MISSION FAILED", "Press 'R' to Restart.", (255, 50, 50))
+        elif self.state in (GameState.CLEAR, GameState.GAMEOVER):
+            is_player_alive = self.player_sat in self.engine.bodies
+            is_doomed_debri_alive = self.doomed_debri in self.engine.bodies
+
+            if self.is_cinematic_mode and (is_player_alive or is_doomed_debri_alive): # シネマティックフェーズ
+                # シネマティックモードの場合，強制的にトラッキングカメラにして最期を見せる．
+                self.renderer.camera = self.tracking_camera
+
+                if is_player_alive:
+                    self.selected_body = self.player_sat
+                else:
+                    self.selected_body = self.doomed_debri
+                self.tracking_camera.set_target_body(self.selected_body)
+
+                # 画面を暗くせず（bg_alpha=0），理由と「見届けろ」というメッセージだけを出す．
+                self.renderer.draw_overlay("Watch the re-entry...", self.end_reason, (255, 200, 50), bg_alpha=0)
+            else:
+                # 最終リザルト
+                if self.state == GameState.CLEAR:
+                    self.renderer.draw_overlay("MISSION SUCCESS", f"{self.end_reason} Press 'SPACE' to Restart.", (100, 255, 100))
+                else:
+                    self.renderer.draw_overlay("MISSION FAILED", f"{self.end_reason} Press 'SPACE' to Restart.", (255, 50, 50))
 
         pygame.display.flip()
 
