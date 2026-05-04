@@ -504,7 +504,7 @@ class SpaceDebrisApp:
         # 成功条件：デブリとプレイヤー双方が突入見込み（予測線で確定）
         if debris_doomed and player_doomed:
             self.state = GameState.CLEAR
-            self.end_reason = "Re-entry trajectory confirmed!"
+            self.end_reason = "Re-entry confirmed!"
             self.is_cinematic_mode = True # 燃え尽きるまで見せるモードON
         
         # 失敗条件：プレイヤーが地表に激突して物理的に破壊された（燃料が残っていても死）

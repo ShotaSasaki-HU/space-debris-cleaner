@@ -210,6 +210,12 @@ class GravityEngine:
         # Step 5: 衝突の解決（速度更新後に行うことで運動量が保存される？）
         collision_events = self._resolve_collisions(target_bodies) if includes_collision else []
 
+        # Step 6: docked_bodyへ速度ベクトルを共有（空力加熱エフェクトのため）
+        for body in target_bodies:
+            if body.docked_body:
+                body.docked_body.velocity = body.velocity
+                break
+
         return collision_events
 
     def initialize(self) -> None:
