@@ -176,7 +176,7 @@ class SpaceDebrisApp:
             if event.key == pygame.K_r:
                 self.sas_enabled = not self.sas_enabled
 
-            # カメラの3段階切り替えロジック
+            # カメラの切り替えロジック
             elif event.key == pygame.K_RSHIFT:
                 if self.view_mode == "EARTH":
                     self.view_mode = "TRACKING"
@@ -195,7 +195,16 @@ class SpaceDebrisApp:
                         
                     self.capture_state = 'IDLE'
                     self.capture_progress = 0.0
-                
+
+    def _handle_common_hotkeys(self, event):
+        """プレイ中・結果確定後を問わず有効な共通ホットキー"""
+        if event.type == pygame.KEYDOWN:
+            # 早送り係数の操作
+            if event.key == pygame.K_PERIOD:
+                self.fast_forward_rate = min(1000.0, self.fast_forward_rate * 10.0)
+            elif event.key == pygame.K_COMMA:
+                self.fast_forward_rate = max(1.0, self.fast_forward_rate / 10.0)
+            
             if type(self.renderer.camera) is EarthCamera:
                 if event.key == pygame.K_RIGHT:
                     max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / (1.3 * 2.0) # 地球の直径 = 2DU
@@ -210,15 +219,6 @@ class SpaceDebrisApp:
                     self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
                 elif event.key == pygame.K_LEFT:
                     self.renderer.camera.set_pixels_per_du(max(PIXELS_PER_DU, self.renderer.camera.get_pixels_per_du() // 2))
-
-    def _handle_common_hotkeys(self, event):
-        """プレイ中・結果確定後を問わず有効な共通ホットキー"""
-        if event.type == pygame.KEYDOWN:
-            # 早送り係数の操作
-            if event.key == pygame.K_PERIOD:
-                self.fast_forward_rate = min(1000.0, self.fast_forward_rate * 10.0)
-            elif event.key == pygame.K_COMMA:
-                self.fast_forward_rate = max(1.0, self.fast_forward_rate / 10.0)
 
     def handle_events(self):
         """ユーザー入力の処理"""
@@ -539,6 +539,7 @@ class SpaceDebrisApp:
             # シネマティックモードの場合，強制的にトラッキングカメラにして最期を見せる．
             if self.is_cinematic_mode:
                 self.renderer.camera = self.tracking_camera
+                self.renderer.camera.set_pixels_per_du(PIXELS_PER_DU * 3) # 地表面が画面下に見えるよう拡大
 
             self.fast_forward_rate = 10.0
 
@@ -569,7 +570,6 @@ class SpaceDebrisApp:
                 else:
                     self.selected_body = self.doomed_debri
                 self.tracking_camera.set_target_body(self.selected_body)
-                self.tracking_camera.set_pixels_per_du(PIXELS_PER_DU * 3) # 地表面が画面下に見えるよう拡大
 
                 # 画面を暗くせず（bg_alpha=0），理由と「見届けろ」というメッセージだけを出す．
                 self.renderer.draw_overlay("Watch the re-entry...", self.end_reason, (255, 200, 50), bg_alpha=0)
