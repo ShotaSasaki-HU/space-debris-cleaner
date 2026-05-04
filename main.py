@@ -564,12 +564,7 @@ class SpaceDebrisApp:
                 else:
                     self.selected_body = self.doomed_debri
                 self.tracking_camera.set_target_body(self.selected_body)
-
-                # 追尾中のインスタンスを画面いっぱいに表示
-                target_body = self.renderer.camera.get_target_body()
-                required_du = 1.2 * np.linalg.norm([target_body.real_width_du, target_body.real_height_du])
-                max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / required_du
-                self.renderer.camera.set_pixels_per_du(max_pixels_per_du)
+                self.tracking_camera.set_pixels_per_du(PIXELS_PER_DU * 3) # 地表面がギリギリ見えるように拡大
 
                 # 画面を暗くせず（bg_alpha=0），理由と「見届けろ」というメッセージだけを出す．
                 self.renderer.draw_overlay("Watch the re-entry...", self.end_reason, (255, 200, 50), bg_alpha=0)
