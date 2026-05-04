@@ -513,7 +513,7 @@ class SpaceDebrisApp:
             self.state = GameState.GAMEOVER
 
             # 高度で死因を切り分ける
-            if np.linalg.norm(self.player_sat.position) <= (EARTH_RADIUS_M * METER_TO_DU):
+            if np.linalg.norm(self.player_sat.position) <= (EARTH_RADIUS_M * METER_TO_DU * 1.01): # 1%のマージンあり
                 self.end_reason = "Hull destroyed on impact with Earth's surface."
             else:
                 self.end_reason = "Hull destroyed due to critical collision."
