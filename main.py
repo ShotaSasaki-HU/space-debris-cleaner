@@ -504,7 +504,13 @@ class SpaceDebrisApp:
         # 成功条件をすり抜けているため，後からデブリが大気圏突入する可能性も無い．
         if is_player_crashed:
             self.state = GameState.GAMEOVER
-            self.end_reason = "Hull destroyed on impact with Earth’s surface."
+
+            # 高度で死因を切り分ける
+            if np.linalg.norm(self.player_sat.position) <= (EARTH_RADIUS_M * METER_TO_DU):
+                self.end_reason = "Hull destroyed on impact with Earth's surface."
+            else:
+                self.end_reason = "Hull destroyed due to critical collision."
+
             self.is_cinematic_mode = False
             return
         
