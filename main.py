@@ -111,8 +111,8 @@ class SpaceDebrisApp:
         i_sat_cano = CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2 * KG_TO_MU * (METER_TO_DU ** 2)
         self.player_sat = RigidBody(
             mass=m_sat_cano,
-            position=np.array([0.0, -r_player]),
-            velocity=np.array([v_player, 0.0]),
+            position=np.array([r_player, 0.0]),
+            velocity=np.array([0.0, v_player]),
             moment_of_inertia=i_sat_cano,
             angle=np.pi / 2.0,
             image_path="assets/images/player_sat.png",
