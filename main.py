@@ -185,12 +185,6 @@ class SpaceDebrisApp:
                     self.view_mode = "EARTH"
                     self.renderer.camera = self.earth_camera
 
-            # 早送り係数の操作
-            elif event.key == pygame.K_PERIOD:
-                self.fast_forward_rate = min(1000.0, self.fast_forward_rate * 10.0)
-            elif event.key == pygame.K_COMMA:
-                self.fast_forward_rate = max(1.0, self.fast_forward_rate / 10.0)
-
             # 捕獲・リリース操作
             elif event.key == pygame.K_RETURN:
                 if self.capture_state in ['CAPTURING', 'DOCKED']:
@@ -216,6 +210,15 @@ class SpaceDebrisApp:
                     self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
                 elif event.key == pygame.K_LEFT:
                     self.renderer.camera.set_pixels_per_du(max(PIXELS_PER_DU, self.renderer.camera.get_pixels_per_du() // 2))
+
+    def _handle_common_hotkeys(self, event):
+        """プレイ中・結果確定後を問わず有効な共通ホットキー"""
+        if event.type == pygame.KEYDOWN:
+            # 早送り係数の操作
+            if event.key == pygame.K_PERIOD:
+                self.fast_forward_rate = min(1000.0, self.fast_forward_rate * 10.0)
+            elif event.key == pygame.K_COMMA:
+                self.fast_forward_rate = max(1.0, self.fast_forward_rate / 10.0)
 
     def handle_events(self):
         """ユーザー入力の処理"""
@@ -248,10 +251,13 @@ class SpaceDebrisApp:
                     self.state = GameState.PLAYING
 
             elif self.state == GameState.PLAYING:
-                self._handle_playing_events(event) # ゲーム中の入力処理
+                self._handle_playing_events(event)
+                self._handle_common_hotkeys(event)
             
             elif self.state in (GameState.CLEAR, GameState.GAMEOVER):
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE: # リスタート
+                self._handle_common_hotkeys(event) # 結果確定後も共通ホットキーを評価
+                
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                     self._reset_game()
             
             # --- 状態ごとの入力処理ココマデ ---
@@ -452,7 +458,6 @@ class SpaceDebrisApp:
             self._update_playing(dt_real_sec) # ゲーム本編プレイ中の更新処理
             self._check_win_loss_condition() # 勝敗判定
         elif self.state in (GameState.CLEAR, GameState.GAMEOVER):
-            self.fast_forward_rate = 10.0
             self._update_playing(dt_real_sec) # ゲーム本編プレイ中の更新処理を流用
     
     def _check_win_loss_condition(self):
@@ -490,6 +495,8 @@ class SpaceDebrisApp:
             np.linalg.norm(self.player_sat.position) <= (EARTH_RADIUS_M * METER_TO_DU) or
             self.player_sat not in self.engine.bodies
         )
+
+        previous_state = self.state # 状態遷移を検知して早送り倍率を設定するための記録
         
         # --- 成否のステートマシンココカラ ---
 
@@ -498,11 +505,10 @@ class SpaceDebrisApp:
             self.state = GameState.CLEAR
             self.end_reason = "Re-entry trajectory confirmed!"
             self.is_cinematic_mode = True # 燃え尽きるまで見せるモードON
-            return
         
         # 失敗条件：プレイヤーが地表に激突して物理的に破壊された（燃料が残っていても死）
         # 成功条件をすり抜けているため，後からデブリが大気圏突入する可能性も無い．
-        if is_player_crashed:
+        elif is_player_crashed:
             self.state = GameState.GAMEOVER
 
             # 高度で死因を切り分ける
@@ -512,23 +518,28 @@ class SpaceDebrisApp:
                 self.end_reason = "Hull destroyed due to critical collision."
 
             self.is_cinematic_mode = False
-            return
         
         # 失敗条件
-        if (not debris_doomed) and ((self.player_sat.propellant_mass <= 0.0) and player_doomed):
+        elif (not debris_doomed) and ((self.player_sat.propellant_mass <= 0.0) and player_doomed):
             self.state = GameState.GAMEOVER
             self.end_reason = "Fatal trajectory. Target not removed."
             self.is_cinematic_mode = True # 燃え尽きるまで見せるモードON
-            return
         
         # 失敗条件：燃料がゼロになった時点で，CLEAR条件を満たしていないなら全て失敗．
-        if self.player_sat.propellant_mass <= 0.0:
+        elif self.player_sat.propellant_mass <= 0.0:
             self.state = GameState.GAMEOVER
             self.end_reason = "Out of propellant. Stranded in orbit."
             self.is_cinematic_mode = False # 永遠に軌道を回り続けるので即座にリザルトへ
-            return
 
         # --- 成否のステートマシンココマデ ---
+
+        # ステートが切り替わった「その瞬間」に1度だけ共通の終了処理を行う．
+        if previous_state == GameState.PLAYING and self.state != GameState.PLAYING:
+            # シネマティックモードの場合，強制的にトラッキングカメラにして最期を見せる．
+            if self.is_cinematic_mode:
+                self.renderer.camera = self.tracking_camera
+
+            self.fast_forward_rate = 10.0
 
     def render(self):
         """画面の描画"""
@@ -548,14 +559,17 @@ class SpaceDebrisApp:
             is_doomed_debri_alive = self.doomed_debri in self.engine.bodies
 
             if self.is_cinematic_mode and (is_player_alive or is_doomed_debri_alive): # シネマティックフェーズ
-                # シネマティックモードの場合，強制的にトラッキングカメラにして最期を見せる．
-                self.renderer.camera = self.tracking_camera
-
                 if is_player_alive:
                     self.selected_body = self.player_sat
                 else:
                     self.selected_body = self.doomed_debri
                 self.tracking_camera.set_target_body(self.selected_body)
+
+                # 追尾中のインスタンスを画面いっぱいに表示
+                target_body = self.renderer.camera.get_target_body()
+                required_du = 1.2 * np.linalg.norm([target_body.real_width_du, target_body.real_height_du])
+                max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / required_du
+                self.renderer.camera.set_pixels_per_du(max_pixels_per_du)
 
                 # 画面を暗くせず（bg_alpha=0），理由と「見届けろ」というメッセージだけを出す．
                 self.renderer.draw_overlay("Watch the re-entry...", self.end_reason, (255, 200, 50), bg_alpha=0)
