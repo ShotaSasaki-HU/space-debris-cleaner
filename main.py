@@ -576,9 +576,9 @@ class SpaceDebrisApp:
             else:
                 # 最終リザルト
                 if self.state == GameState.CLEAR:
-                    self.renderer.draw_overlay("MISSION SUCCESS", f"{self.end_reason} Press 'SPACE' to Restart.", (100, 255, 100))
+                    self.renderer.draw_overlay("MISSION SUCCESS", f"{self.end_reason} Press 'SPACE' to restart.", (100, 255, 100))
                 else:
-                    self.renderer.draw_overlay("MISSION FAILED", f"{self.end_reason} Press 'SPACE' to Restart.", (255, 50, 50))
+                    self.renderer.draw_overlay("MISSION FAILED", f"{self.end_reason} Press 'SPACE' to restart.", (255, 50, 50))
 
         pygame.display.flip()
 
