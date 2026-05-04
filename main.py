@@ -105,14 +105,14 @@ class SpaceDebrisApp:
         self.selected_body = self.engine.bodies[-1] # 初期ターゲットの設定（プレイヤー追加前に実施）
 
         # プレイヤー
-        r_player = METER_TO_DU * (EARTH_RADIUS_M + 400e3)
+        r_player = METER_TO_DU * (EARTH_RADIUS_M + 510e3)
         v_player = np.sqrt(G_CANONICAL * M_earth / r_player)
         m_sat_cano = CLEANER_SAT_MASS_KG * KG_TO_MU
         i_sat_cano = CLEANER_SAT_MOMENT_OF_INERTIA_KG_M2 * KG_TO_MU * (METER_TO_DU ** 2)
         self.player_sat = RigidBody(
             mass=m_sat_cano,
-            position=np.array([r_player, 0.0]),
-            velocity=np.array([0.0, v_player]),
+            position=np.array([0.0, -r_player]),
+            velocity=np.array([v_player, 0.0]),
             moment_of_inertia=i_sat_cano,
             angle=np.pi / 2.0,
             image_path="assets/images/player_sat.png",
@@ -386,7 +386,8 @@ class SpaceDebrisApp:
         self.engine.set_time_step(current_physics_dt_tu) # エンジン内部の時間幅を動的に書き換える．
 
         while self.time_accumulator >= current_physics_dt_tu:
-            self._apply_control_forces(dt_tu=current_physics_dt_tu) # ユーザによる並進・回転入力の評価
+            if self.state == GameState.PLAYING:
+                self._apply_control_forces(dt_tu=current_physics_dt_tu) # ユーザによる並進・回転入力の評価
 
             events = self.engine.step()
             for event in events:
@@ -564,7 +565,7 @@ class SpaceDebrisApp:
                 else:
                     self.selected_body = self.doomed_debri
                 self.tracking_camera.set_target_body(self.selected_body)
-                self.tracking_camera.set_pixels_per_du(PIXELS_PER_DU * 3) # 地表面がギリギリ見えるように拡大
+                self.tracking_camera.set_pixels_per_du(PIXELS_PER_DU * 3) # 地表面が画面下に見えるよう拡大
 
                 # 画面を暗くせず（bg_alpha=0），理由と「見届けろ」というメッセージだけを出す．
                 self.renderer.draw_overlay("Watch the re-entry...", self.end_reason, (255, 200, 50), bg_alpha=0)
