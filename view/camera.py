@@ -1,51 +1,56 @@
 # view/camera.py
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Optional
+from abc import ABC, abstractmethod
 from physics.body import RigidBody
 import pygame
 
-class Camera:
+class Camera(ABC):
     """
-    物理空間（カノニカル単位系）と画面空間（ピクセル）の座標変換を行うクラス．MVCアーキテクチャにおけるViewの基盤．
+    物理空間（カノニカル単位系）と画面空間（ピクセル）の座標変換を行う抽象基底クラス．
+    Strategyパターンのインターフェースとして機能する．
     """
     def __init__(self, screen: pygame.Surface, pixels_per_du: float):
         """
         Args:
             screen (pygame.Surface): スクリーン
-            pixels_per_du (float): 1 DU（地球半径）を画面上で何ピクセルとして描画するか．（ズーム倍率）
+            pixels_per_du (float): 1 DU（地球半径）を画面上で何ピクセルとして描画するか．
         """
-        self.screen_width = screen.get_width()
-        self.screen_height = screen.get_height()
-        self.pixels_per_du = pixels_per_du
-        
-        self.center_x = self.screen_width // 2
-        self.center_y = self.screen_height // 2
+        self.update_screen_size(screen=screen)
+        self._pixels_per_du = pixels_per_du
+        self._target_body: Optional[RigidBody] = None # 基底でNoneとして初期化（安全性の担保）
     
+    @abstractmethod
     def world_to_screen(self, world_pos: np.ndarray) -> Tuple[int, int]:
-        raise NotImplementedError("Camera.world_to_screen: このメソッドはオーバーライドしてください．")
+        """このメソッドは各具象Strategy（サブクラス）で実装しなければエラーとなる．"""
+        pass
     
     def update_screen_size(self, screen: pygame.Surface) -> None:
-        """
-        ウィンドウサイズが変更された際に呼ばれ，内部の画面サイズと中心座標を再計算する．
-        """
+        """ウィンドウサイズ変更時の再計算"""
         self.screen_width = screen.get_width()
         self.screen_height = screen.get_height()
-        
+
         self.center_x = self.screen_width // 2
         self.center_y = self.screen_height // 2
     
-    def set_pixels_per_du(self, pixels_per_du: float) -> None: self.pixels_per_du = pixels_per_du
-    def set_target_body(self, target_body: RigidBody) -> None: self.target_body = target_body
-    
-    def get_pixels_per_du(self) -> float: return self.pixels_per_du
-    def get_target_body(self) -> RigidBody: return self.target_body
+    @property
+    def pixels_per_du(self) -> float:
+        return self._pixels_per_du
+
+    @pixels_per_du.setter
+    def pixels_per_du(self, value: float) -> None:
+        self._pixels_per_du = value
+
+    @property
+    def target_body(self) -> Optional[RigidBody]:
+        return self._target_body
+
+    @target_body.setter
+    def target_body(self, body: RigidBody) -> None:
+        self._target_body = body
 
 class EarthCamera(Camera):
-    """
-    地球中心のカメラ
-    """
-    def __init__(self, screen: pygame.Surface, pixels_per_du: float):
-        super().__init__(screen, pixels_per_du)
+    """地球中心のカメラ（具象Strategy1）"""
 
     def world_to_screen(self, world_pos: np.ndarray) -> Tuple[int, int]:
         """
@@ -54,16 +59,13 @@ class EarthCamera(Camera):
         """
         screen_x = self.center_x + int(world_pos[0] * self.pixels_per_du) # X座標 = 画面中央 + (物理X * スケール)
         screen_y = self.center_y - int(world_pos[1] * self.pixels_per_du) # Y座標 = 画面中央 - (物理Y * スケール)
-        
         return (screen_x, screen_y)
 
 class RelativeCamera(Camera):
     """
-    近傍運用用のカメラ．ターゲットを画面中央に固定し，地球を下に回転させて描画する．
+    近傍運用用の追従カメラ（具象Strategy2）
+    ターゲットを画面中央に固定し，地球を下に回転させて描画する．
     """
-    def __init__(self, screen: pygame.Surface, pixels_per_du: float):
-        super().__init__(screen, pixels_per_du)
-        self.target_body: RigidBody = None
 
     def world_to_screen(self, world_pos: np.ndarray) -> Tuple[int, int]:
         if self.target_body is None:

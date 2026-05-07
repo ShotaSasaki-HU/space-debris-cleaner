@@ -133,7 +133,7 @@ class SpaceDebrisApp:
         self.earth_camera = EarthCamera(self.screen, PIXELS_PER_DU)
 
         self.tracking_camera = RelativeCamera(self.screen, PIXELS_PER_DU)
-        self.tracking_camera.set_target_body(self.selected_body)
+        self.tracking_camera.target_body = self.selected_body
 
         self.view_mode = "EARTH"
         self.renderer = GameRenderer(self.screen, self.earth_camera)
@@ -167,7 +167,7 @@ class SpaceDebrisApp:
 
                     if dist < target_r_px:
                         self.selected_body = body
-                        self.tracking_camera.set_target_body(body)
+                        self.tracking_camera.target_body = body
                         break # 先に見つかったbodyが優先
 
         # --- マウスクリックによるターゲット選択ココマデ ---
@@ -208,17 +208,17 @@ class SpaceDebrisApp:
             if type(self.renderer.camera) is EarthCamera:
                 if event.key == pygame.K_RIGHT:
                     max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / (1.3 * 2.0) # 地球の直径 = 2DU
-                    self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
+                    self.renderer.camera.pixels_per_du = min(max_pixels_per_du, self.renderer.camera.pixels_per_du * 2)
                 elif event.key == pygame.K_LEFT:
-                    self.renderer.camera.set_pixels_per_du(max(30, self.renderer.camera.get_pixels_per_du() // 2))
+                    self.renderer.camera.pixels_per_du = max(30, self.renderer.camera.pixels_per_du // 2)
             elif type(self.renderer.camera) is RelativeCamera:
                 if event.key == pygame.K_RIGHT:
-                    target_body = self.renderer.camera.get_target_body()
+                    target_body = self.renderer.camera.target_body
                     required_du = 1.2 * np.linalg.norm([target_body.real_width_du, target_body.real_height_du])
                     max_pixels_per_du = min(self.renderer.camera.screen_width, self.renderer.camera.screen_height) / required_du
-                    self.renderer.camera.set_pixels_per_du(min(max_pixels_per_du, self.renderer.camera.get_pixels_per_du() * 2))
+                    self.renderer.camera.pixels_per_du = min(max_pixels_per_du, self.renderer.camera.pixels_per_du * 2)
                 elif event.key == pygame.K_LEFT:
-                    self.renderer.camera.set_pixels_per_du(max(PIXELS_PER_DU, self.renderer.camera.get_pixels_per_du() // 2))
+                    self.renderer.camera.pixels_per_du = max(PIXELS_PER_DU, self.renderer.camera.pixels_per_du // 2)
 
     def handle_events(self):
         """ユーザー入力の処理"""
@@ -431,7 +431,7 @@ class SpaceDebrisApp:
 
                         # 追跡対象切り替え
                         self.selected_body = self.player_sat
-                        self.tracking_camera.set_target_body(self.selected_body)
+                        self.tracking_camera.target_body = self.selected_body
                 else:
                     # 離れたり早すぎたりしたら捕獲プログレスをリセット
                     if self.capture_state == 'CAPTURING':
@@ -539,7 +539,7 @@ class SpaceDebrisApp:
             # シネマティックモードの場合，強制的にトラッキングカメラにして最期を見せる．
             if self.is_cinematic_mode:
                 self.renderer.camera = self.tracking_camera
-                self.renderer.camera.set_pixels_per_du(PIXELS_PER_DU * 3) # 地表面が画面下に見えるよう拡大
+                self.renderer.camera.pixels_per_du = PIXELS_PER_DU * 3 # 地表面が画面下に見えるよう拡大
 
             self.fast_forward_rate = 10.0
 
@@ -569,7 +569,7 @@ class SpaceDebrisApp:
                     self.selected_body = self.player_sat
                 else:
                     self.selected_body = self.doomed_debri
-                self.tracking_camera.set_target_body(self.selected_body)
+                self.tracking_camera.target_body = self.selected_body
 
                 # 画面を暗くせず（bg_alpha=0），理由と「見届けろ」というメッセージだけを出す．
                 self.renderer.draw_overlay("Watch the re-entry...", self.end_reason, (255, 200, 50), bg_alpha=0)
