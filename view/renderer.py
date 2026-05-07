@@ -862,7 +862,7 @@ class GameRenderer:
 
         if isinstance(self.camera, RelativeCamera):
             # ターゲットの「地球に対する角度（位相）」を計算
-            target_pos = self.camera.get_target_body().position
+            target_pos = self.camera.target_body.position
             theta = np.atan2(target_pos[1], target_pos[0])
             
             rot_angle = (np.pi / 2.0) - theta # ターゲットを真上に持ってくるために回している角度

@@ -18,7 +18,6 @@ class Camera(ABC):
         """
         self.update_screen_size(screen=screen)
         self._pixels_per_du = pixels_per_du
-        self._target_body: Optional[RigidBody] = None # 基底でNoneとして初期化（安全性の担保）
     
     @abstractmethod
     def world_to_screen(self, world_pos: np.ndarray) -> Tuple[int, int]:
@@ -41,14 +40,6 @@ class Camera(ABC):
     def pixels_per_du(self, value: float) -> None:
         self._pixels_per_du = value
 
-    @property
-    def target_body(self) -> Optional[RigidBody]:
-        return self._target_body
-
-    @target_body.setter
-    def target_body(self, body: RigidBody) -> None:
-        self._target_body = body
-
 class EarthCamera(Camera):
     """地球中心のカメラ（具象Strategy1）"""
 
@@ -66,6 +57,9 @@ class RelativeCamera(Camera):
     近傍運用用の追従カメラ（具象Strategy2）
     ターゲットを画面中央に固定し，地球を下に回転させて描画する．
     """
+    def __init__(self, screen: pygame.Surface, pixels_per_du: float):
+        super().__init__(screen, pixels_per_du)
+        self._target_body: Optional[RigidBody] = None # RelativeCameraだけの専用プロパティ（基底に実装するとISP違反）
 
     def world_to_screen(self, world_pos: np.ndarray) -> Tuple[int, int]:
         if self.target_body is None:
@@ -90,3 +84,11 @@ class RelativeCamera(Camera):
         screen_y = self.center_y - int(x_local * self.pixels_per_du)
 
         return (screen_x, screen_y)
+    
+    @property
+    def target_body(self) -> Optional[RigidBody]:
+        return self._target_body
+
+    @target_body.setter
+    def target_body(self, body: RigidBody) -> None:
+        self._target_body = body
