@@ -168,25 +168,7 @@ class GameRenderer:
 
                 # 結合されているターゲットの再帰描画
                 if getattr(body, 'docked_body', None):
-                    docked = body.docked_body
-                        
-                    dx, dy = body.docked_offset_local
-                    docked_offset_world = np.array([dx * cos_b - dy * sin_b, dx * sin_b + dy * cos_b])
-                        
-                    # 元のパラメータを退避
-                    orig_pos = docked.position
-                    orig_angle = docked.angle
-                        
-                    # 親の座標と角度に追従させて一時的に上書き
-                    docked.position = body.position + docked_offset_world
-                    docked.angle = body.angle + body.docked_rel_angle
-                        
-                    # 再帰描画（縁取りは消す）
-                    self._draw_realistic_body(docked, is_selected=False)
-                        
-                    # 復元
-                    docked.position = orig_pos
-                    docked.angle = orig_angle
+                    self._draw_realistic_body(body.docked_body, is_selected=False) # 再帰描画（縁取りは消す）
                 
                 # --- 空力加熱エフェクトココカラ ---
 

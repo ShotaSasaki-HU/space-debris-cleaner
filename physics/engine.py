@@ -182,6 +182,28 @@ class GravityEngine:
                     
                     body.acceleration += drag_dir * drag_acc_mag
 
+    def _sync_docked_bodies(self, parent: RigidBody):
+        """
+        ドッキングにより結合されている剛体に対し，状態（絶対座標・角度など）を再帰的に同期する．
+        """
+        child = parent.docked_body
+        if not child:
+            return
+        
+        # 親の角度を元にローカルオフセットを絶対座標のオフセットに変換
+        cos_b = np.cos(parent.angle)
+        sin_b = np.sin(parent.angle)
+        dx, dy = parent.docked_offset_local
+        offset_world = np.array([dx * cos_b - dy * sin_b, dx * sin_b + dy * cos_b])
+
+        # 子の状態を親を基準に確定させる．
+        child.position = parent.position + offset_world
+        child.angle = parent.angle + parent.docked_rel_angle
+        child.velocity = parent.velocity # 空力加熱エフェクトに必要
+
+        # 孫以降が存在すれば再帰的に伝播
+        self._sync_docked_bodies(child)
+
     def _step_bodies(self, target_bodies: List[RigidBody], dt: float, includes_collision: bool) -> List[CollisionEvent]:
         """
         指定された剛体リストと時間刻み幅で，並進と回転の速度ベルレ法を実行し，衝突も解決する．
@@ -210,11 +232,9 @@ class GravityEngine:
         # Step 5: 衝突の解決（速度更新後に行うことで運動量が保存される？）
         collision_events = self._resolve_collisions(target_bodies) if includes_collision else []
 
-        # Step 6: docked_bodyへ速度ベクトルを共有（空力加熱エフェクトのため）
+        # Step 6: docked_bodyへ状態を共有（描画や空力加熱エフェクトのため）
         for body in target_bodies:
-            if body.docked_body:
-                body.docked_body.velocity = body.velocity
-                break
+            self._sync_docked_bodies(parent=body) # ドッキングが数珠繋ぎでも共有される．
 
         return collision_events
 
