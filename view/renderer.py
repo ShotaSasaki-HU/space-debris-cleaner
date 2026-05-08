@@ -1,7 +1,7 @@
 # view/renderer.py
 import pygame
 import numpy as np
-from typing import Dict
+from typing import Dict, Optional, Tuple
 from datetime import datetime
 from skyfield.api import load, Star
 from skyfield.data import hipparcos
@@ -65,198 +65,211 @@ class GameRenderer:
         for body in bodies:
             is_selected = (body is selected_body)
             self._draw_realistic_body(body=body, is_selected=is_selected)
+    
+    def _get_or_load_image(self, body: RigidBody) -> Optional[pygame.Surface]:
+        """画像リソースの読み込みとキャッシュ"""
+        if not body.image_path:
+            return None
 
-    def _draw_realistic_body(self, body: RigidBody, is_selected: bool = False):
-        """画像をロードし，視点に合わせてスケーリング・回転して描画する．"""
-        if body.image_path:
-            if body.image_path not in self.image_cache:
-                try:
-                    image = pygame.image.load(body.image_path).convert_alpha() # convert_alpha()で透過を有効にする．
-                    self.image_cache[body.image_path] = image
-                except pygame.error as e:
-                    print(f"Error loading image: {body.image_path}, {e}")
-                    body.image_path = None # ロードに失敗した場合は，画像パスをNoneにしてフォールバックする．
+        if body.image_path not in self.image_cache:
+            try:
+                image = pygame.image.load(body.image_path).convert_alpha() # convert_alpha()で透過を有効にする．
+                self.image_cache[body.image_path] = image
+            except pygame.error as e:
+                print(f"Error loading image: {body.image_path}, {e}")
+                body.image_path = None # ロードに失敗した場合は，画像パスをNoneにしてフォールバックする．
+                return None
 
-            image: pygame.Surface = self.image_cache.get(body.image_path)
-            if image:
-                # スケーリングロジック
-                # まずは，原寸大でスケーリングしてみる．
-                target_w = int(body.real_width_du * self.camera.pixels_per_du)
-                target_h = int(body.real_height_du * self.camera.pixels_per_du)
+        return self.image_cache.get(body.image_path)
+    
+    def _calc_scale_and_size(self, body: RigidBody, image: pygame.Surface) -> Tuple[int, int]:
+        """画面上の描画サイズ（ピクセル）の計算"""
+        # まずは，原寸大でスケーリングしてみる．
+        target_w = int(body.real_width_du * self.camera.pixels_per_du)
+        target_h = int(body.real_height_du * self.camera.pixels_per_du)
 
-                # 原寸大が小さすぎたら，固定サイズに変更する．
-                if min(target_w, target_h) < body.draw_fixed_size_px:
-                    orig_w, orig_h = image.get_size()
-                    target_size_px = body.draw_fixed_size_px
-                    if orig_w > orig_h:
-                        target_w = target_size_px
-                        target_h = int(orig_h * target_size_px / orig_w)
-                    else:
-                        target_h = target_size_px
-                        target_w = int(orig_w * target_size_px / orig_h)
-                
-                # 厳密性に欠けるが，大きすぎる画像はクラッシュを起こすため放棄する．
-                if target_w > 5000 or target_h > 5000: return
+        # 原寸大が小さすぎたら，固定サイズに変更する．
+        if min(target_w, target_h) < body.draw_fixed_size_px:
+            orig_w, orig_h = image.get_size()
+            target_size_px = body.draw_fixed_size_px
+            if orig_w > orig_h:
+                target_w = target_size_px
+                target_h = int(orig_h * target_size_px / orig_w)
+            else:
+                target_h = target_size_px
+                target_w = int(orig_w * target_size_px / orig_h)
+        
+        return target_w, target_h
+    
+    def _calc_screen_transform(self, body: RigidBody) -> Tuple[Tuple[int, int], float]:
+        """重心オフセットの適用およびカメラに応じた画面座標・回転角の算出"""
+        visual_offset_world = np.array([0.0, 0.0])
+        if hasattr(body, 'visual_offset_local') and np.any(body.visual_offset_local):
+            cos_b = np.cos(body.angle)
+            sin_b = np.sin(body.angle)
+            lx, ly = body.visual_offset_local
+            visual_offset_world = np.array([lx * cos_b - ly * sin_b, lx * sin_b + ly * cos_b])
 
-                # --- オフセット適用ココカラ ---
+        # 重心位置にオフセットを足した場所をスクリーンの中心とする
+        body_pos_px = self.camera.world_to_screen(body.position + visual_offset_world) # 物理エンジンの座標を画面座標へ変換
 
-                visual_offset_world = np.array([0.0, 0.0])
-                if hasattr(body, 'visual_offset_local') and np.any(body.visual_offset_local):
-                    cos_b = np.cos(body.angle)
-                    sin_b = np.sin(body.angle)
-                    lx, ly = body.visual_offset_local
-                    visual_offset_world = np.array([lx * cos_b - ly * sin_b, lx * sin_b + ly * cos_b])
+        # カメラの種類に応じた画像の回転角
+        if isinstance(self.camera, EarthCamera):
+            angle_rad = body.angle
+        else:
+            # ターゲットの「地球に対する角度（位相）」を計算
+            theta = np.atan2(self.camera.target_body.position[1], self.camera.target_body.position[0])
+            angle_rad = (np.pi / 2) - theta + body.angle
+        
+        return body_pos_px, angle_rad
+    
+    def _is_on_screen(self, pos_px: Tuple[int, int], approx_radius: float) -> bool:
+        """画面外カリングの判定"""
+        screen_w, screen_h = self.screen.get_size()
+        return not (
+            pos_px[0] + approx_radius < 0 or 
+            pos_px[0] - approx_radius > screen_w or
+            pos_px[1] + approx_radius < 0 or 
+            pos_px[1] - approx_radius > screen_h
+        )
+    
+    def _get_scaled_image(self, cache_key: str, image: pygame.Surface, target_w: int, target_h: int) -> pygame.Surface:
+        """スケーリング処理とサイズのキャッシュ"""
+        # 前回と同じサイズならキャッシュを利用する．pygameのscale演算が重いため．
+        if cache_key in self.scaled_cache:
+            cached_w, cached_h, cached_surf = self.scaled_cache[cache_key]
+            if cached_w == target_w and cached_h == target_h:
+                return cached_surf
 
-                # 重心位置にオフセットを足した場所をスクリーンの中心とする
-                body_pos_px = self.camera.world_to_screen(body.position + visual_offset_world) # 物理エンジンの座標を画面座標へ変換
+        # 大きな画像では，重いsmoothscaleの使用を避ける．
+        if target_w > 2000 or target_h > 2000:
+            scaled_image = pygame.transform.scale(image, (target_w, target_h))
+        else:
+            scaled_image = pygame.transform.smoothscale(image, (target_w, target_h))
 
-                # --- オフセット適用ココマデ ---
-                
-                # --- カリングココカラ ---
+        self.scaled_cache[cache_key] = (target_w, target_h, scaled_image) # キャッシュを保存
+        return scaled_image
+    
+    def _draw_aerodynamic_heating_vfx(self, body: RigidBody, rotated_image: pygame.Surface, draw_pos: Tuple[int, int]):
+        """空力加熱エフェクトの描画"""
+        r_mag = np.linalg.norm(body.position)
+        if r_mag >= ATMOSPHERE_RADIUS_DU: return
 
-                # 画像のだいたいの半径
-                approx_radius = max(target_w, target_h) * 0.75
-                screen_w, screen_h = self.screen.get_size()
-                
-                # 画面内に入っているか判定
-                is_on_screen = not (
-                    body_pos_px[0] + approx_radius < 0 or 
-                    body_pos_px[0] - approx_radius > screen_w or
-                    body_pos_px[1] + approx_radius < 0 or 
-                    body_pos_px[1] - approx_radius > screen_h
-                )
+        v_mag = np.linalg.norm(body.velocity)
+        if v_mag <= 0.05: return # ある程度の速度がある時だけ燃える．
 
-                if not is_on_screen: return
+        vel_dir = -body.velocity / v_mag
 
-                # --- カリングココマデ ---
+        if isinstance(self.camera, EarthCamera):
+            dir_x, dir_y = vel_dir[0], -vel_dir[1]
+        else:
+            theta = np.atan2(self.camera.target_body.position[1], self.camera.target_body.position[0])
+            rot_angle = (np.pi / 2.0) - theta
+            dir_x = vel_dir[0] * np.cos(rot_angle) - vel_dir[1] * np.sin(rot_angle)
+            dir_y = -(vel_dir[0] * np.sin(rot_angle) + vel_dir[1] * np.cos(rot_angle))
 
-                # --- スケーリングのキャッシュココカラ ---
+        surface_radius_du = EARTH_RADIUS_M * METER_TO_DU
+        body_alt_du = r_mag - surface_radius_du
+        atmosphere_alt_du = ATMOSPHERE_RADIUS_DU - surface_radius_du
+        
+        alt_factor = max(0.0, 1.0 - (body_alt_du / atmosphere_alt_du))
+        intensity = min(1.0, alt_factor * (v_mag * 5.0)) # 燃焼強度: 0.0 - 1.0
+        if intensity <= 0: return
 
-                cache_key = body.image_path
-                needs_scaling = True
+        opaque_mask = pygame.mask.from_surface(rotated_image)
 
-                # 前回と同じサイズならキャッシュを利用する．pygameのscale演算が重いため．
-                if cache_key in self.scaled_cache:
-                    cached_w, cached_h, cached_surf = self.scaled_cache[cache_key]
-                    if cached_w == target_w and cached_h == target_h:
-                        scaled_image = cached_surf
-                        needs_scaling = False
+        # エフェクト1：バウショック（前面に張り付くプラズマの壁）
+        # dir_x, y は「進行方向の逆（尾を引く方向）」なので，マイナスをかけて進行方向へズラす．
+        bow_color = (255, 200, 50, int(200 * intensity))
+        bow_surf = opaque_mask.to_surface(setcolor=bow_color, unsetcolor=(0, 0, 0, 0))
+        self.screen.blit(bow_surf, (draw_pos[0] - dir_x * (5 * intensity), draw_pos[1] - dir_y * (5 * intensity)))
 
-                if needs_scaling:
-                    # 大きな画像では，重いsmoothscaleの使用を避ける．
-                    if target_w > 2000 or target_h > 2000:
-                        scaled_image = pygame.transform.scale(image, (target_w, target_h))
-                    else:
-                        scaled_image = pygame.transform.smoothscale(image, (target_w, target_h))
+        # エフェクト2：プラズマの尾（シルエットの後方スタンプ）
+        trail_steps = 3
+        for i in range(1, trail_steps + 1):
+            trail_alpha = int((150 * intensity) / i)
+            trail_color = (255, max(0, 100 - i*30), 0, trail_alpha)
+            trail_surf = opaque_mask.to_surface(setcolor=trail_color, unsetcolor=(0, 0, 0, 0))
+            self.screen.blit(trail_surf, (draw_pos[0] + dir_x * (10 * i * intensity), draw_pos[1] + dir_y * (10 * i * intensity)))
 
-                    self.scaled_cache[cache_key] = (target_w, target_h, scaled_image) # キャッシュを保存
+        # エフェクト3：高熱のスパーク（輪郭からの炎の筋）
+        outline = opaque_mask.outline()
+        if len(outline) > 0:
+            flame_length = 80 * intensity
+            flame_surf = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
 
-                # --- スケーリングのキャッシュココマデ ---
+            # 描画負荷を下げるため，輪郭点を間引く．（30本程度に制限）
+            step = max(1, len(outline) // 30)
+            for p in outline[::step]:
+                sx, sy = p[0] + draw_pos[0], p[1] + draw_pos[1]
 
-                # EarthCameraの場合
-                if isinstance(self.camera, EarthCamera):
-                    rotated_image = pygame.transform.rotate(scaled_image, np.rad2deg(body.angle))
-                # RelativeCameraの場合
-                else:
-                    # ターゲットの「地球に対する角度（位相）」を計算
-                    theta = np.atan2(self.camera.target_body.position[1], self.camera.target_body.position[0])
-                    rotated_image = pygame.transform.rotate(scaled_image, np.rad2deg((np.pi / 2) - theta + body.angle))
-                
-                rotated_rect = rotated_image.get_rect() # 回転後の画像サイズを取得
-                draw_pos = (body_pos_px[0] - rotated_rect.width // 2,
-                            body_pos_px[1] - rotated_rect.height // 2) # 画像の中心座標を取得
+                # ランダムな長さと揺らぎ
+                flicker = np.random.uniform(0.3, 1.2)
+                ex, ey = sx + dir_x * flame_length * flicker, sy + dir_y * flame_length * flicker
 
-                # 結合されているターゲットの再帰描画
-                if getattr(body, 'docked_body', None):
-                    self._draw_realistic_body(body.docked_body, is_selected=False) # 再帰描画（縁取りは消す）
-                
-                # --- 空力加熱エフェクトココカラ ---
+                # 根元は太く黄色，先端は細く赤く．
+                pygame.draw.line(flame_surf, (255, 200, 0, int(200*intensity)), (sx, sy), (sx + dir_x*flame_length*0.2, sy + dir_y*flame_length*0.2), 3)
+                pygame.draw.line(flame_surf, (255, 50, 0, int(100*intensity)), (sx + dir_x*flame_length*0.2, sy + dir_y*flame_length*0.2), (ex, ey), 1)
+            
+            self.screen.blit(flame_surf, (0, 0))
+    
+    def _draw_selection_outline(self, rotated_image: pygame.Surface, draw_pos: Tuple[int, int]):
+        """ターゲット選択時の黄色い縁取り"""
+        opaque_mask = pygame.mask.from_surface(rotated_image)
+        outline = opaque_mask.outline() # マスクの輪郭座標リスト
+        if len(outline) >= 2:
+            # 輪郭座標は画像の左上が原点なので，画面描画座標 (draw_pos) にオフセットを加算する．
+            outline_points = [(p[0] + draw_pos[0], p[1] + draw_pos[1]) for p in outline]
 
-                opaque_mask = pygame.mask.from_surface(rotated_image) # 画像の非透過部分からマスクを生成
-
-                r_mag = np.linalg.norm(body.position)
-                if r_mag < ATMOSPHERE_RADIUS_DU:
-                    v_mag = np.linalg.norm(body.velocity)
-                    if v_mag > 0.05: # ある程度の速度がある時だけ燃える
-                        vel_dir = -body.velocity / v_mag
-                        
-                        if isinstance(self.camera, EarthCamera):
-                            dir_x, dir_y = vel_dir[0], -vel_dir[1]
-                        else:
-                            theta = np.atan2(self.camera.target_body.position[1], self.camera.target_body.position[0])
-                            rot_angle = (np.pi / 2.0) - theta
-                            dir_x = vel_dir[0] * np.cos(rot_angle) - vel_dir[1] * np.sin(rot_angle)
-                            dir_y = -(vel_dir[0] * np.sin(rot_angle) + vel_dir[1] * np.cos(rot_angle))
-                        
-                        surface_radius_du = EARTH_RADIUS_M * METER_TO_DU
-                        body_alt_du = r_mag - surface_radius_du
-                        atmosphere_alt_du = ATMOSPHERE_RADIUS_DU - surface_radius_du
-                        
-                        alt_factor = max(0.0, 1.0 - (body_alt_du / atmosphere_alt_du))
-                        intensity = min(1.0, alt_factor * (v_mag * 5.0)) # 燃焼強度: 0.0 - 1.0
-
-                        # エフェクト1：バウショック（前面に張り付くプラズマの壁）
-                        # dir_x, y は「進行方向の逆（尾を引く方向）」なので，マイナスをかけて進行方向へズラす．
-                        bow_color = (255, 200, 50, int(200 * intensity))
-                        bow_surf = opaque_mask.to_surface(setcolor=bow_color, unsetcolor=(0, 0, 0, 0))
-                        self.screen.blit(bow_surf, (draw_pos[0] - dir_x * (5 * intensity), draw_pos[1] - dir_y * (5 * intensity)))
-
-                        # エフェクト2：プラズマの尾（シルエットの後方スタンプ）
-                        trail_steps = 3
-                        for i in range(1, trail_steps + 1):
-                            trail_alpha = int((150 * intensity) / i)
-                            trail_color = (255, max(0, 100 - i*30), 0, trail_alpha)
-                            trail_surf = opaque_mask.to_surface(setcolor=trail_color, unsetcolor=(0, 0, 0, 0))
-                            
-                            tx = dir_x * (10 * i * intensity)
-                            ty = dir_y * (10 * i * intensity)
-                            self.screen.blit(trail_surf, (draw_pos[0] + tx, draw_pos[1] + ty))
-
-                        # エフェクト3：高熱のスパーク（輪郭からの炎の筋）
-                        outline = opaque_mask.outline()
-                        if len(outline) > 0:
-                            flame_length = 80 * intensity
-                            flame_surf = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
-                            
-                            # 描画負荷を下げるため，輪郭点を間引く．（30本程度に制限）
-                            step = max(1, len(outline) // 30)
-                            for p in outline[::step]:
-                                sx = p[0] + draw_pos[0]
-                                sy = p[1] + draw_pos[1]
-                                
-                                # ランダムな長さと揺らぎ
-                                flicker = np.random.uniform(0.3, 1.2)
-                                ex = sx + dir_x * flame_length * flicker
-                                ey = sy + dir_y * flame_length * flicker
-                                
-                                # 根元は太く黄色，先端は細く赤く．
-                                pygame.draw.line(flame_surf, (255, 200, 0, int(200*intensity)), (sx, sy), (sx + dir_x*flame_length*0.2, sy + dir_y*flame_length*0.2), 3)
-                                pygame.draw.line(flame_surf, (255, 50, 0, int(100*intensity)), (sx + dir_x*flame_length*0.2, sy + dir_y*flame_length*0.2), (ex, ey), 1)
-                                
-                            self.screen.blit(flame_surf, (0, 0))
-
-                # --- 空力加熱エフェクトココマデ ---
-                
-                # 選択されているbodyの縁取り
-                if is_selected:
-                    # opaque_maskは，空力加熱エフェクトが既に作っているので再生成の必要無し．
-                    outline = opaque_mask.outline() # マスクの輪郭座標リスト
-                    if len(outline) >= 2:
-                        # 輪郭座標は画像の左上が原点なので，画面描画座標 (draw_pos) にオフセットを加算する．
-                        outline_points = [(p[0] + draw_pos[0], p[1] + draw_pos[1]) for p in outline]
-
-                        # 縁取りの透過
-                        temp_surf = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
-                        pygame.draw.lines(temp_surf, (255, 255, 0, 255), True, outline_points, 2)
-                        self.screen.blit(temp_surf, (0, 0))
-                
-                self.screen.blit(rotated_image, draw_pos) # ターゲットより後で前面に描画
-
-                return # リアル画像での描画に成功したら終了
-
-        # フォールバック（画像がない場合の描画）
+            # 縁取りの透過
+            temp_surf = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+            pygame.draw.lines(temp_surf, (255, 255, 0, 255), True, outline_points, 2)
+            self.screen.blit(temp_surf, (0, 0))
+    
+    def _draw_fallback(self, body: RigidBody):
+        """画像が見つからない場合の四角形描画"""
         body_screen_pos = self.camera.world_to_screen(body.position)
         pygame.draw.rect(self.screen, (255, 255, 255), (body_screen_pos[0]-6, body_screen_pos[1]-6, 12, 12))
+
+    def _draw_realistic_body(self, body: RigidBody, is_selected: bool = False):
+        """単一の剛体を描画する．子パーツがある場合は再帰的に描画する．"""
+        # 1. 画像のロード
+        image = self._get_or_load_image(body)
+        if not image:
+            self._draw_fallback(body)
+            return
+
+        # 2. サイズ計算
+        target_w, target_h = self._calc_scale_and_size(body, image)
+        # 厳密性に欠けるが，大きすぎる画像はクラッシュを起こすため放棄する．
+        if target_w > 5000 or target_h > 5000: return
+
+        # 3. 画面座標と角度の算出
+        body_pos_px, angle_rad = self._calc_screen_transform(body)
+
+        # 4. カリング判定
+        if not self._is_on_screen(pos_px=body_pos_px, approx_radius=max(target_w, target_h) * 0.75):
+            return
+
+        # 5. スケーリングと回転
+        scaled_image = self._get_scaled_image(body.image_path, image, target_w, target_h)
+        rotated_image = pygame.transform.rotate(scaled_image, np.rad2deg(angle_rad))
+        rotated_rect = rotated_image.get_rect() # 回転後の画像サイズを取得
+        draw_pos = (body_pos_px[0] - rotated_rect.width // 2, body_pos_px[1] - rotated_rect.height // 2) # 画像の中心座標を取得
+
+        # 6. ドッキング中の子RigidBodyの再帰描画
+        if getattr(body, 'docked_body', None):
+            self._draw_realistic_body(body.docked_body, is_selected=True)
+
+        # 7. 空力加熱エフェクト
+        self._draw_aerodynamic_heating_vfx(body, rotated_image, draw_pos)
+
+        # 8. 選択時の輪郭を描画
+        if is_selected:
+            self._draw_selection_outline(rotated_image, draw_pos)
+
+        # 9. 本体の描画（子は親の後ろに描画されるよう，最後にblitする．）
+        self.screen.blit(rotated_image, draw_pos)
 
     def draw_ui(self, player: RigidBody, target: RigidBody, sas_enabled: bool, throttle: float, player_torque: float,
                 mission_start_time: datetime, simulation_time: datetime, fast_forward_rate: float, capture_state: str, progress: float):
